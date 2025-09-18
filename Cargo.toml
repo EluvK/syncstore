@@ -10,14 +10,18 @@ edition = "2024"
 
 [workspace.dependencies]
 anyhow = "1.0.99"
-salvo = "0.83.0"
+async-trait = "0.1.89"
+chrono = { version = "0.4.41", features = ["serde"] }
+jsonschema = "0.33.0"
+r2d2 = "0.8.10"
+r2d2_sqlite = "0.31.0"
+# rusqlite = { version = "0.37.0", features = ["bundled", "chrono"] }
+salvo = { version = "0.84.0", features = ["affix-state", "jwt-auth", "oapi"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
-tokio = { version = "1.47.1", features = ["full"] }
-chrono = { version = "0.4.41", features = ["serde"] }
-rusqlite = { version = "0.37.0", features = ["bundled", "chrono"] }
 thiserror = "2.0.16"
-uuid = { version = "1.18.1", features = ["v4"] }
+tokio = { version = "1.47.1", features = ["full"] }
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.20", features = ["local-time"] }
+uuid = { version = "1.18.1", features = ["v4"] }

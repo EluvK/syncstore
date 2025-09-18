@@ -28,7 +28,8 @@
 
 * `id`: 主键（UUID / ULID）。
 * `created_at`, `updated_at`: 时间戳。
-* `created_by`, `updated_by`: 引用 `user.id`，表明操作者。
+* `owner`: 引用 `user.id`，表明数据所属用户。
+* `references`: 记录当前数据引用的其他 collection 记录（跨 collection 引用
 
 这些字段由 syncstore 自动维护，用户无需手动填充。
 
@@ -53,7 +54,7 @@
 
 * 权限校验在 syncstore 内完成：
 
-  * 根据 `role` 和 `created_by` 判断是否允许写操作。
+  * 根据 `role` 和 `owner` 判断是否允许写操作。
   * 其他 collection 可通过 `$ref: "user.id"` 引用用户。
 
 这样实现后，user 既保持 schema 驱动的一致性，又能承担权限校验的核心职责。
