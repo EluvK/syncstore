@@ -37,22 +37,23 @@ pub struct Meta {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub owner: Uid,
-
+    pub unique: Option<String>,
     // should constructed from schema, only used in memory, not serialized to DB
-    #[serde(skip)]
-    pub references: Vec<Reference>,
+    // #[serde(skip)]
+    // pub references: Vec<Reference>,
 }
 
 impl Meta {
     // todo maybe add a schema param later to construct references
-    pub fn new(owner: Uid) -> Self {
+    pub fn new(owner: Uid, unique: Option<String>) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4().to_string(),
             created_at: now,
             updated_at: now,
             owner,
-            references: vec![],
+            unique,
+            // references: vec![],
         }
     }
 }

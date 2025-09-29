@@ -10,6 +10,9 @@ pub trait Backend: Send + Sync {
     /// Get a document by id.
     fn get(&self, collection: &str, id: &Id) -> StoreResult<(Value, Meta)>;
 
+    /// Get a document by unique field.
+    fn get_by_unique(&self, collection: &str, unique: &str) -> StoreResult<(Value, Meta)>;
+
     /// Update an existing document by id. Returns updated meta.
     fn update(&self, collection: &str, id: &Id, body: &Value) -> StoreResult<Meta>;
 

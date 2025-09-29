@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::backend::Backend;
 use crate::error::{StoreError, StoreResult};
-use crate::types::{Id, Meta, Reference};
+use crate::types::{Id, Meta};
 
 // ?let's write some user define schema checker here for now, late move to separate file module.
 mod checker {
@@ -149,6 +149,8 @@ impl SqliteBackendBuilder {
 pub struct SqliteBackend {
     pool: Arc<Pool<SqliteConnectionManager>>,
     schema_validator: HashMap<String, jsonschema::Validator>,
+
+    unique_fields: HashMap<String, String>, // collection -> unique field
 }
 
 impl SqliteBackend {
@@ -163,6 +165,7 @@ impl SqliteBackend {
         let backend = Self {
             pool: Arc::new(pool),
             schema_validator: HashMap::new(),
+            unique_fields: HashMap::new(),
         };
         backend.init().map(|_| backend)
     }
@@ -174,6 +177,7 @@ impl SqliteBackend {
         let backend = Self {
             pool: Arc::new(pool),
             schema_validator: HashMap::new(),
+            unique_fields: HashMap::new(),
         };
         backend.init().map(|_| backend)
     }
@@ -229,20 +233,26 @@ impl SqliteBackend {
                 column,
             }))
         }
-        let cp = jsonschema::draft7::options().with_keyword("db_exists", move |parent, value, path| {
+        let compiled = jsonschema::draft7::options().with_keyword("db_exists", move |parent, value, path| {
             db_exists_func(parent, value, path, pool.clone())
         });
-        let compiled = cp
+        let compiled = compiled
             .build(schema)
             .map_err(|e| StoreError::Validation(format!("invalid schema: {}", e)))?;
 
         // let compiled =
         //     jsonschema::draft7::new(schema).map_err(|e| StoreError::Validation(format!("invalid schema: {}", e)))?;
         self.schema_validator.insert(collection.to_string(), compiled);
+        // record the unique field if any
+        if let Some(xu) = schema.get("x-unique").and_then(|v| v.as_str())
+            && !xu.is_empty()
+        {
+            self.unique_fields.insert(collection.to_string(), xu.to_string());
+        }
 
         // ensure collection table exists
         let table = sanitize_table_name(collection);
-        // todo delete refs column.
+
         // todo how to make `owner` db_exists to users.id?,
         //?actually it might be unnecessary as owner should be checked by auth module before coming here.
         let sql = format!(
@@ -252,13 +262,29 @@ impl SqliteBackend {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 owner TEXT NOT NULL,
-                refs TEXT NOT NULL DEFAULT '[]'
+                uniq TEXT UNIQUE
             );",
             table
         );
         tx.execute_batch(&sql).map_err(|e| StoreError::Backend(e.to_string()))?;
         tx.commit().map_err(|e| StoreError::Backend(e.to_string()))?;
         Ok(())
+    }
+
+    // fetch the unique field value from body if was defined in schema
+    fn fetch_unique_field(&self, collection: &str, body: &Value) -> StoreResult<Option<String>> {
+        // todo future support nested field like "a.b.c"
+        if let Some(field) = self.unique_fields.get(collection)
+            && let Some(v) = body.get(field)
+        {
+            return match v.as_str() {
+                Some(s) => Ok(Some(s.to_string())),
+                None => serde_json::to_string(v)
+                    .map(Some)
+                    .map_err(|e| StoreError::Backend(e.to_string())),
+            };
+        }
+        Ok(None)
     }
 
     fn validate_against_schema(&self, collection: &str, body: &Value) -> StoreResult<()> {
@@ -289,11 +315,16 @@ impl Backend for SqliteBackend {
         // validate data, ensure collection table exists and schema validated
         self.validate_against_schema(collection, body)?;
         let body_text = serde_json::to_string(body).map_err(|e| StoreError::Backend(e.to_string()))?;
-        let refs_text = serde_json::to_string(&meta.references).map_err(|e| StoreError::Backend(e.to_string()))?;
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
+
+        let mut meta = meta;
+        if meta.unique.is_none() {
+            meta.unique = self.fetch_unique_field(collection, body)?;
+        }
+
         let sql = format!(
-            "INSERT INTO {} (id, body, created_at, updated_at, owner, refs) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO {} (id, body, created_at, updated_at, owner, uniq) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             table
         );
         conn.execute(
@@ -304,19 +335,20 @@ impl Backend for SqliteBackend {
                 meta.created_at.to_rfc3339(),
                 meta.updated_at.to_rfc3339(),
                 meta.owner,
-                refs_text
+                meta.unique
             ],
         )
-        .map_err(|e| {
-            if let rusqlite::Error::SqliteFailure(err, _) = &e {
-                if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                    StoreError::Validation("id already exists".into())
-                } else {
-                    StoreError::Backend(e.to_string())
-                }
-            } else {
-                StoreError::Backend(e.to_string())
+        .map_err(|e| match &e {
+            rusqlite::Error::SqliteFailure(err, msg)
+                if err.code == rusqlite::ErrorCode::ConstraintViolation
+                    && msg.as_ref().is_some_and(|m| m.contains("UNIQUE")) =>
+            {
+                StoreError::Validation(format!("unique constraint violation: {}, {:?}", err, msg))
             }
+            rusqlite::Error::SqliteFailure(err, msg) if err.code == rusqlite::ErrorCode::ConstraintViolation => {
+                StoreError::Validation(format!("id already exists: {}, {:?}", err, msg))
+            }
+            _ => StoreError::Backend(e.to_string()),
         })?;
         Ok(meta)
     }
@@ -325,7 +357,7 @@ impl Backend for SqliteBackend {
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
         let sql = format!(
-            "SELECT body, created_at, updated_at, owner, refs FROM {} WHERE id = ?1",
+            "SELECT body, created_at, updated_at, owner, uniq FROM {} WHERE id = ?1",
             table
         );
         let mut stmt = conn.prepare(&sql).map_err(|e| StoreError::Backend(e.to_string()))?;
@@ -336,16 +368,14 @@ impl Backend for SqliteBackend {
                 let created_at: String = r.get(1)?;
                 let updated_at: String = r.get(2)?;
                 let owner: String = r.get(3)?;
-                let references_text: String = r.get(4)?;
-                Ok((body_text, created_at, updated_at, owner, references_text))
+                let unique: Option<String> = r.get(4)?;
+                Ok((body_text, created_at, updated_at, owner, unique))
             })
             .optional()
             .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        if let Some((body_text, created_at, updated_at, owner, references_text)) = row {
+        if let Some((body_text, created_at, updated_at, owner, unique)) = row {
             let body: Value = serde_json::from_str(&body_text).map_err(|e| StoreError::Backend(e.to_string()))?;
-            let references: Vec<Reference> =
-                serde_json::from_str(&references_text).map_err(|e| StoreError::Backend(e.to_string()))?;
             let meta = Meta {
                 id: id.clone(),
                 created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
@@ -355,7 +385,51 @@ impl Backend for SqliteBackend {
                     .map_err(|e| StoreError::Backend(e.to_string()))?
                     .with_timezone(&chrono::Utc),
                 owner,
-                references,
+                unique,
+            };
+            Ok((body, meta))
+        } else {
+            Err(StoreError::NotFound)
+        }
+    }
+
+    fn get_by_unique(&self, collection: &str, unique: &str) -> StoreResult<(Value, Meta)> {
+        if !self.unique_fields.contains_key(collection) {
+            return Err(StoreError::Validation(format!(
+                "collection '{}' does not have unique field defined",
+                collection
+            )));
+        }
+        let table = sanitize_table_name(collection);
+        let conn = self.get_conn()?;
+        let sql = format!(
+            "SELECT id, body, created_at, updated_at, owner FROM {} WHERE uniq = ?1",
+            table
+        );
+        let mut stmt = conn.prepare(&sql).map_err(|e| StoreError::Backend(e.to_string()))?;
+        let row = stmt
+            .query_row(params![unique], |r| {
+                let id: String = r.get(0)?;
+                let body_text: String = r.get(1)?;
+                let created_at: String = r.get(2)?;
+                let updated_at: String = r.get(3)?;
+                let owner: String = r.get(4)?;
+                Ok((id, body_text, created_at, updated_at, owner))
+            })
+            .optional()
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+        if let Some((id, body_text, created_at, updated_at, owner)) = row {
+            let body: Value = serde_json::from_str(&body_text).map_err(|e| StoreError::Backend(e.to_string()))?;
+            let meta = Meta {
+                id,
+                created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+                    .map_err(|e| StoreError::Backend(e.to_string()))?
+                    .with_timezone(&chrono::Utc),
+                updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
+                    .map_err(|e| StoreError::Backend(e.to_string()))?
+                    .with_timezone(&chrono::Utc),
+                owner,
+                unique: Some(unique.to_string()),
             };
             Ok((body, meta))
         } else {
@@ -370,9 +444,13 @@ impl Backend for SqliteBackend {
         let updated_at = chrono::Utc::now().to_rfc3339();
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
-        let sql = format!("UPDATE {} SET body = ?1, updated_at = ?2 WHERE id = ?3", table);
+        let unique = self.fetch_unique_field(collection, body)?;
+        let sql = format!(
+            "UPDATE {} SET body = ?1, updated_at = ?2, uniq = ?3 WHERE id = ?4",
+            table
+        );
         let n = conn
-            .execute(&sql, params![body_text, updated_at, id])
+            .execute(&sql, params![body_text, updated_at, unique, id])
             .map_err(|e| StoreError::Backend(e.to_string()))?;
         if n == 0 {
             return Err(StoreError::NotFound);

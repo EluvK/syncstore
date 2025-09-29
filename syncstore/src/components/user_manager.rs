@@ -14,22 +14,25 @@ pub struct UserManager {
 // ? real hate to build more wheels, late to do this, after adding route for all db modules.
 // ? for now a quick simple name password check.
 impl UserManager {
+    const USER_TABLE: &str = "users";
+
     pub fn new(base_dir: impl AsRef<Path>) -> StoreResult<Self> {
         let mut path = base_dir.as_ref().to_path_buf();
         std::fs::create_dir_all(&path)?;
         path.push("users.db");
 
-        let user_auth = serde_json::json!({
+        let user_schema = serde_json::json!({
             "type": "object",
             "properties": {
                 "username": { "type": "string" },
                 "password": { "type": "string" }
             },
-            "required": ["username", "password"]
+            "required": ["username", "password"],
+            "x-unique": "username"
         });
         let backend = Arc::new(
             SqliteBackendBuilder::file(path)
-                .with_collection_schema("users", user_auth)
+                .with_collection_schema(UserManager::USER_TABLE, user_schema)
                 .build()?,
         );
 
@@ -42,9 +45,24 @@ impl UserManager {
             "password": password
         });
         // todo lots of works here...
-        let meta = Meta::new("system".to_string());
-        self.backend.insert("users", &user, meta)?;
+        let meta = Meta::new("root".to_string(), Some(username.to_string()));
+        self.backend.insert(UserManager::USER_TABLE, &user, meta)?;
         Ok(())
+    }
+
+    pub fn validate_user(&self, username: &str, password: &str) -> StoreResult<Option<String>> {
+        if let Ok((value, meta)) = self.backend.get_by_unique(UserManager::USER_TABLE, username)
+            && value.get("password") == Some(&serde_json::json!(password))
+        {
+            Ok(Some(meta.id))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn get_user(&self, user_id: &String) -> StoreResult<String> {
+        let (_value, meta) = self.backend.get(UserManager::USER_TABLE, user_id)?;
+        Ok(meta.id)
     }
 }
 
@@ -124,5 +142,27 @@ mod checker {
             }
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[allow(unused_imports)]
+    use super::*;
+
+    #[test]
+    fn test_user_creation() {
+        let user_manager = UserManager::new("./test_db").unwrap();
+        let res = user_manager.create_user("test_user", "test_password");
+        println!("User creation result: {:?}", res);
+        // assert!(res.is_ok());
+        let v1 = user_manager.validate_user("test_user", "test_password").unwrap();
+        assert!(v1.is_some());
+        println!("Validation with correct password: {:?}", v1);
+        let v2 = user_manager.validate_user("test_user", "wrong_password").unwrap();
+        assert!(v2.is_none());
+        let v3 = user_manager.validate_user("nonexistent", "test_password").unwrap();
+        assert!(v3.is_none());
     }
 }

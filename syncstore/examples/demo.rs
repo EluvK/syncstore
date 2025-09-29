@@ -16,6 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "author": { "type": "string", "db_exists": {"collection": "users", "column": "id"} }
             },
             "required": ["title", "author"],
+            "x-unique": "title",
             // "additionalProperties": false
         })
     };
@@ -29,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // insert
     let doc = json!({ "title": "Welcome", "author": "system" });
-    let meta = store.insert(namespace, "post", &doc, "system".to_string())?;
+    let meta = store.insert(namespace, "post", &doc, "system".to_string(), None)?;
     println!("Inserted id: {}", meta.id);
 
     // get

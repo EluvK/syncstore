@@ -8,8 +8,8 @@ use crate::error::StoreResult;
 use crate::types::{Id, Meta, Uid};
 
 pub struct Store {
-    data_manager: Arc<DataManager>,
-    user_manager: Arc<UserManager>,
+    pub data_manager: Arc<DataManager>,
+    pub user_manager: Arc<UserManager>,
 }
 
 impl Store {
@@ -22,9 +22,16 @@ impl Store {
     }
 
     /// Insert a document body. Returns meta including generated id.
-    pub fn insert(&self, namespace: &str, collection: &str, body: &Value, owner: Uid) -> StoreResult<Meta> {
+    pub fn insert(
+        &self,
+        namespace: &str,
+        collection: &str,
+        body: &Value,
+        owner: Uid,
+        unique: Option<String>,
+    ) -> StoreResult<Meta> {
         let backend = self.data_manager.backend_for(namespace)?;
-        let meta = Meta::new(owner);
+        let meta = Meta::new(owner, unique);
         backend.insert(collection, body, meta)
     }
 

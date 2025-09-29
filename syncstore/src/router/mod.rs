@@ -1,5 +1,10 @@
+mod auth;
+mod user;
+
+use std::sync::Arc;
+
 use salvo::{
-    Depot, FlowCtrl, Request, Response, Router, handler,
+    Depot, FlowCtrl, Request, Response, Router, affix_state, handler,
     jwt_auth::{ConstDecoder, HeaderFinder, QueryFinder},
     prelude::{JwtAuth, JwtAuthDepotExt, JwtAuthState},
 };
@@ -7,10 +12,11 @@ use salvo::{
 use crate::{
     config::ServiceConfig,
     error::{ServiceError, ServiceResult},
+    store::Store,
     utils::jwt::JwtClaims,
 };
 
-pub fn create_router(config: &ServiceConfig) -> Router {
+pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
     let auth_handler: JwtAuth<JwtClaims, _> =
         JwtAuth::new(ConstDecoder::from_secret(config.jwt.access_secret.as_bytes()))
             .finders(vec![
@@ -21,7 +27,10 @@ pub fn create_router(config: &ServiceConfig) -> Router {
 
     let non_auth_router = Router::new();
     let auth_router = Router::new().hoop(auth_handler).hoop(jwt_to_user);
-    Router::new().push(auth_router).push(non_auth_router)
+    Router::new()
+        .hoop(affix_state::inject(store))
+        .push(auth_router)
+        .push(non_auth_router)
 }
 
 // check the jwt token from request, convert to user profile.
@@ -41,9 +50,16 @@ async fn jwt_to_user(
                 ctrl.skip_rest();
                 return Ok(());
             }
-            // todo fetch user profile from db.
-
-            tracing::info!("Authorized.");
+            let user_manager = depot.obtain::<Arc<Store>>()?.user_manager.clone();
+            let Ok(user_id) = user_manager.get_user(&claim.sub) else {
+                tracing::info!("Unauthorized: User not found");
+                res.render(ServiceError::Unauthorized("User not found".to_string()));
+                ctrl.skip_rest();
+                return Ok(());
+            };
+            tracing::info!("Authorized. user_id: {}", user_id);
+            depot.insert("user_id", user_id.clone());
+            ctrl.call_next(req, depot, res).await;
         }
         (_, None) => {
             tracing::info!("Unauthorized: No JWT token found");
