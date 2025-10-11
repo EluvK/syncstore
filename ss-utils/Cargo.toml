@@ -1,0 +1,15 @@
+[package]
+name = "ss-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# tracing-appender = { workspace = true }
+# tracing-subscriber = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.20", features = ["local-time"] }

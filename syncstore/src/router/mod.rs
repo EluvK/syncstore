@@ -6,6 +6,7 @@ use std::sync::Arc;
 use salvo::{
     Depot, FlowCtrl, Request, Response, Router, affix_state, handler,
     jwt_auth::{ConstDecoder, HeaderFinder, QueryFinder},
+    oapi::{RouterExt, SecurityRequirement},
     prelude::{JwtAuth, JwtAuthDepotExt, JwtAuthState},
 };
 
@@ -25,8 +26,12 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
             ])
             .force_passed(true);
 
-    let non_auth_router = Router::new();
-    let auth_router = Router::new().hoop(auth_handler).hoop(jwt_to_user);
+    let non_auth_router = Router::new().push(Router::with_path("auth").push(auth::create_non_auth_router()));
+    let auth_router = Router::new()
+        .hoop(auth_handler)
+        .hoop(jwt_to_user)
+        .push(Router::with_path("auth").push(auth::create_router()))
+        .oapi_security(SecurityRequirement::new("bearer", vec!["bearer"]));
     Router::new()
         .hoop(affix_state::inject(store))
         .push(auth_router)

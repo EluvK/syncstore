@@ -1,0 +1,14 @@
+[package]
+name = "xss"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+ss-utils = { path = "../ss-utils" }
+syncstore = { path = "../syncstore" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = "0.9.8"

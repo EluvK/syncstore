@@ -1,11 +1,19 @@
+use std::sync::Arc;
+
 use salvo::{
-    Router, Scribe, Writer,
-    oapi::{ToResponse, ToSchema, endpoint, extract::JsonBody},
+    Depot, Request, Response, Router, Scribe, Writer,
+    oapi::{RouterExt, ToResponse, ToSchema, endpoint, extract::JsonBody},
     writing::Json,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::error::ServiceResult;
+use crate::{
+    error::{ServiceError, ServiceResult},
+    store::Store,
+    utils::jwt::{generate_jwt_token, generate_refresh_token, verify_refresh_token},
+};
+
+static COOKIE_HTTPS_ONLY: bool = false; // TODO: set to true in production
 
 pub fn create_router() -> Router {
     Router::new()
@@ -13,6 +21,9 @@ pub fn create_router() -> Router {
 
 pub fn create_non_auth_router() -> Router {
     Router::new()
+        .push(Router::with_path("name-login").post(login))
+        .push(Router::with_path("refresh").post(refresh))
+        .oapi_tag("auth")
 }
 
 #[endpoint(
@@ -23,10 +34,64 @@ pub fn create_non_auth_router() -> Router {
         (status_code = 401, description = "Unauthorized")
     )
 )]
-async fn login(req: JsonBody<NameLoginRequest>) -> ServiceResult<LoginResponse> {
-    // Handle login logic here
+async fn login(
+    req: JsonBody<NameLoginRequest>,
+    depot: &mut Depot,
+    resp: &mut Response,
+) -> ServiceResult<LoginResponse> {
+    let user_manager = depot.obtain::<Arc<Store>>()?.user_manager.clone();
+    let Some(user_id) = user_manager.validate_user(&req.username, &req.password)? else {
+        return Err(ServiceError::Unauthorized("Invalid username or password".to_string()));
+    };
+    let access_token = generate_jwt_token(user_id.clone())?;
+    let refresh_token = generate_refresh_token(user_id.clone())?;
 
-    todo!()
+    resp.add_cookie(
+        salvo::http::cookie::CookieBuilder::new("refresh_token", refresh_token.clone())
+            .max_age(salvo::http::cookie::time::Duration::days(7))
+            .same_site(salvo::http::cookie::SameSite::Lax)
+            .http_only(true)
+            .secure(COOKIE_HTTPS_ONLY)
+            .build(),
+    );
+
+    Ok(LoginResponse {
+        access_token,
+        refresh_token,
+        user_id,
+    })
+}
+
+#[endpoint(
+    status_codes(200, 401),
+    responses(
+        (status_code = 200, description = "Token refreshed successfully", body = LoginResponse),
+        (status_code = 401, description = "Unauthorized")
+    )
+)]
+async fn refresh(req: &mut Request, resp: &mut Response) -> ServiceResult<LoginResponse> {
+    let refresh_token = req
+        .cookies()
+        .get("refresh_token")
+        .ok_or_else(|| ServiceError::Unauthorized("No refresh token found".to_string()))?
+        .value();
+    let user_id = verify_refresh_token(refresh_token)?.sub;
+    let access_token = generate_jwt_token(user_id.clone())?;
+    let refresh_token = generate_refresh_token(user_id.clone())?;
+    resp.add_cookie(
+        salvo::http::cookie::CookieBuilder::new("refresh_token", refresh_token.clone())
+            .max_age(salvo::http::cookie::time::Duration::days(7))
+            .same_site(salvo::http::cookie::SameSite::Lax)
+            .http_only(true)
+            .secure(COOKIE_HTTPS_ONLY)
+            .build(),
+    );
+
+    Ok(LoginResponse {
+        access_token,
+        refresh_token,
+        user_id,
+    })
 }
 
 // -- schema definitions
@@ -44,6 +109,7 @@ struct NameLoginRequest {
 #[serde(rename_all = "camelCase")]
 struct LoginResponse {
     access_token: String,
+    refresh_token: String,
     user_id: String,
 }
 
