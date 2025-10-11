@@ -26,6 +26,9 @@ pub fn create_non_auth_router() -> Router {
         .oapi_tag("auth")
 }
 
+/// Login with username and password
+///
+/// Authenticates the user and returns an access token and a refresh token.
 #[endpoint(
     status_codes(200, 401),
     request_body(content = NameLoginRequest, description = "Login by username and password"),
@@ -62,6 +65,9 @@ async fn login(
     })
 }
 
+/// Refresh the access token using the refresh token
+///
+/// Returns a new access token and a new refresh token.
 #[endpoint(
     status_codes(200, 401),
     responses(
@@ -94,17 +100,17 @@ async fn refresh(req: &mut Request, resp: &mut Response) -> ServiceResult<LoginR
     })
 }
 
-// -- schema definitions
-
+/// Request body for name-login
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 struct NameLoginRequest {
     #[salvo(schema(example = "user1"))]
     username: String,
-    #[salvo(schema(example = "password"))]
+    #[salvo(schema(example = "pswd1234"))]
     password: String,
 }
 
+/// Response data for login
 #[derive(Serialize, ToResponse, ToSchema)]
 #[serde(rename_all = "camelCase")]
 struct LoginResponse {
