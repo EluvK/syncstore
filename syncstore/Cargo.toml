@@ -10,7 +10,7 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 jsonschema = { workspace = true }
-jsonwebtoken = "9.3.1"
+jsonwebtoken = { version = "10.0.0", features = ["rust_crypto"] }
 r2d2 = { workspace = true }
 r2d2_sqlite = { workspace = true }
 salvo = { workspace = true }
