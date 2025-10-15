@@ -1,3 +1,4 @@
+mod admin;
 mod auth;
 mod user;
 
@@ -36,6 +37,12 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
         .hoop(affix_state::inject(store))
         .push(auth_router)
         .push(non_auth_router)
+}
+
+pub fn admin_router(store: Arc<Store>) -> Router {
+    Router::new()
+        .hoop(affix_state::inject(store))
+        .push(admin::create_router())
 }
 
 // check the jwt token from request, convert to user profile.

@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct ServiceConfig {
+    pub admin_address: String,
     pub address: String,
     pub jwt: Jwt,
 }
