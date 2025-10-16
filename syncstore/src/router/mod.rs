@@ -1,5 +1,6 @@
 mod admin;
 mod auth;
+mod data;
 mod user;
 
 use std::sync::Arc;

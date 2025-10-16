@@ -1,2 +1,5 @@
 /target
+
+# local test
 /logs
+/db_test

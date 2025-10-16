@@ -5,7 +5,6 @@ use salvo::{
     prelude::*,
 };
 
-use crate::components::DataManagerBuilder;
 use std::sync::Arc;
 
 pub mod backend;
@@ -21,13 +20,8 @@ pub mod utils;
 // pub use crate::store::Store;
 // pub use crate::types::{Id, Meta};
 
-pub async fn init_service(config: &config::ServiceConfig) -> anyhow::Result<()> {
+pub async fn init_service(store: Arc<store::Store>, config: &config::ServiceConfig) -> anyhow::Result<()> {
     utils::jwt::set_jwt_config(&config.jwt);
-
-    // todo, data/user manager should either build from config, or passed in as param
-    let data_manager = DataManagerBuilder::new("./").build();
-    let store = store::Store::new(Arc::new(data_manager));
-    let store = Arc::new(store);
 
     let api_router = Router::new().push(Router::with_path("api").push(router::create_router(config, store.clone())));
     let admin_router = Router::new().push(Router::with_path("admin").push(router::admin_router(store)));
