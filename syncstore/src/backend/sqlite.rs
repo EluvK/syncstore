@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::backend::Backend;
 use crate::error::{StoreError, StoreResult};
-use crate::types::{Id, Meta};
+use crate::types::{DataItem, Id, Meta};
 
 // ?let's write some user define schema checker here for now, late move to separate file module.
 mod checker {
@@ -161,7 +161,7 @@ impl SqliteBackend {
     // in-memory sqlite
     fn memory() -> StoreResult<Self> {
         let manager = SqliteConnectionManager::memory();
-        let pool = Pool::new(manager).map_err(|e| StoreError::Backend(e.to_string()))?;
+        let pool = Pool::new(manager)?;
         let backend = Self {
             pool: Arc::new(pool),
             schema_validator: HashMap::new(),
@@ -173,7 +173,7 @@ impl SqliteBackend {
     // file-based sqlite
     fn open<P: AsRef<Path>>(path: P) -> StoreResult<Self> {
         let manager = SqliteConnectionManager::file(path.as_ref());
-        let pool = Pool::new(manager).map_err(|e| StoreError::Backend(e.to_string()))?;
+        let pool = Pool::new(manager)?;
         let backend = Self {
             pool: Arc::new(pool),
             schema_validator: HashMap::new(),
@@ -183,7 +183,7 @@ impl SqliteBackend {
     }
 
     fn get_conn(&self) -> StoreResult<PooledConnection<SqliteConnectionManager>> {
-        self.pool.get().map_err(|e| StoreError::Backend(e.to_string()))
+        Ok(self.pool.get()?)
     }
 
     /// common initialization, create internal tables
@@ -200,23 +200,22 @@ impl SqliteBackend {
                     schema TEXT NOT NULL
                 );
             "#,
-        )
-        .map_err(|e| StoreError::Backend(e.to_string()))?;
+        )?;
         Ok(())
     }
 
     /// Save or update a collection schema.
     fn init_collection_schema(&mut self, collection: &str, schema: &Value) -> StoreResult<()> {
-        let s = serde_json::to_string(schema).map_err(|e| StoreError::Backend(e.to_string()))?;
+        let s = serde_json::to_string(schema)?;
         let mut conn = self.get_conn()?;
 
-        let tx = conn.transaction().map_err(|e| StoreError::Backend(e.to_string()))?;
+        let tx = conn.transaction()?;
 
         tx.execute(
             "INSERT INTO __schemas(collection, schema) VALUES (?1, ?2) ON CONFLICT(collection) DO UPDATE SET schema = excluded.schema",
             params![collection, s],
         )
-        .map_err(|e| StoreError::Backend(e.to_string()))?;
+        ?;
         // compile and cache the schema validator
         let pool = self.pool.clone();
         fn db_exists_func<'a>(
@@ -266,8 +265,8 @@ impl SqliteBackend {
             );",
             table
         );
-        tx.execute_batch(&sql).map_err(|e| StoreError::Backend(e.to_string()))?;
-        tx.commit().map_err(|e| StoreError::Backend(e.to_string()))?;
+        tx.execute_batch(&sql)?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -279,9 +278,7 @@ impl SqliteBackend {
         {
             return match v.as_str() {
                 Some(s) => Ok(Some(s.to_string())),
-                None => serde_json::to_string(v)
-                    .map(Some)
-                    .map_err(|e| StoreError::Backend(e.to_string())),
+                None => Ok(Some(serde_json::to_string(v)?)),
             };
         }
         Ok(None)
@@ -314,7 +311,7 @@ impl Backend for SqliteBackend {
     fn insert(&self, collection: &str, body: &Value, meta: Meta) -> StoreResult<Meta> {
         // validate data, ensure collection table exists and schema validated
         self.validate_against_schema(collection, body)?;
-        let body_text = serde_json::to_string(body).map_err(|e| StoreError::Backend(e.to_string()))?;
+        let body_text = serde_json::to_string(body)?;
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
 
@@ -353,14 +350,53 @@ impl Backend for SqliteBackend {
         Ok(meta)
     }
 
-    fn get(&self, collection: &str, id: &Id) -> StoreResult<(Value, Meta)> {
+    fn list(
+        &self,
+        collection: &str,
+        limit: usize,
+        marker: Option<&str>,
+    ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
+        let conn = self.get_conn()?;
+        let table = sanitize_table_name(collection);
+        // use a single query: if marker is NULL the WHERE clause is ignored
+        let sql = format!(
+            "SELECT id, body, created_at, updated_at, owner, uniq \
+             FROM {} \
+             WHERE (?1 IS NULL OR id > ?1) \
+             ORDER BY id ASC \
+             LIMIT ?2",
+            table
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query(params![marker, limit as i64])?;
+        let mut items = Vec::new();
+        let mut last_id: Option<String> = None;
+        while let Some(row) = rows.next()? {
+            let id = row.get::<_, String>(0)?;
+            items.push(DataItem {
+                id: id.clone(),
+                body: serde_json::from_str::<Value>(&row.get::<_, String>(1)?)?,
+                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)?
+                    .with_timezone(&chrono::Utc),
+                updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)?
+                    .with_timezone(&chrono::Utc),
+                owner: row.get(4)?,
+                unique: row.get(5)?,
+            });
+            last_id = Some(id);
+        }
+        let next_marker = if items.len() == limit { last_id } else { None };
+        Ok((items, next_marker))
+    }
+
+    fn get(&self, collection: &str, id: &Id) -> StoreResult<DataItem> {
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
         let sql = format!(
             "SELECT body, created_at, updated_at, owner, uniq FROM {} WHERE id = ?1",
             table
         );
-        let mut stmt = conn.prepare(&sql).map_err(|e| StoreError::Backend(e.to_string()))?;
+        let mut stmt = conn.prepare(&sql)?;
 
         let row = stmt
             .query_row(params![id], |r| {
@@ -371,29 +407,24 @@ impl Backend for SqliteBackend {
                 let unique: Option<String> = r.get(4)?;
                 Ok((body_text, created_at, updated_at, owner, unique))
             })
-            .optional()
-            .map_err(|e| StoreError::Backend(e.to_string()))?;
+            .optional()?;
 
         if let Some((body_text, created_at, updated_at, owner, unique)) = row {
-            let body: Value = serde_json::from_str(&body_text).map_err(|e| StoreError::Backend(e.to_string()))?;
-            let meta = Meta {
-                id: id.clone(),
-                created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-                    .map_err(|e| StoreError::Backend(e.to_string()))?
-                    .with_timezone(&chrono::Utc),
-                updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-                    .map_err(|e| StoreError::Backend(e.to_string()))?
-                    .with_timezone(&chrono::Utc),
+            let body: Value = serde_json::from_str(&body_text)?;
+            Ok(DataItem {
+                id: id.to_string(),
+                created_at: chrono::DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&chrono::Utc),
+                updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)?.with_timezone(&chrono::Utc),
                 owner,
                 unique,
-            };
-            Ok((body, meta))
+                body,
+            })
         } else {
-            Err(StoreError::NotFound)
+            Err(StoreError::NotFound("Get Data".to_string()))
         }
     }
 
-    fn get_by_unique(&self, collection: &str, unique: &str) -> StoreResult<(Value, Meta)> {
+    fn get_by_unique(&self, collection: &str, unique: &str) -> StoreResult<DataItem> {
         if !self.unique_fields.contains_key(collection) {
             return Err(StoreError::Validation(format!(
                 "collection '{}' does not have unique field defined",
@@ -406,7 +437,7 @@ impl Backend for SqliteBackend {
             "SELECT id, body, created_at, updated_at, owner FROM {} WHERE uniq = ?1",
             table
         );
-        let mut stmt = conn.prepare(&sql).map_err(|e| StoreError::Backend(e.to_string()))?;
+        let mut stmt = conn.prepare(&sql)?;
         let row = stmt
             .query_row(params![unique], |r| {
                 let id: String = r.get(0)?;
@@ -416,31 +447,26 @@ impl Backend for SqliteBackend {
                 let owner: String = r.get(4)?;
                 Ok((id, body_text, created_at, updated_at, owner))
             })
-            .optional()
-            .map_err(|e| StoreError::Backend(e.to_string()))?;
+            .optional()?;
         if let Some((id, body_text, created_at, updated_at, owner)) = row {
-            let body: Value = serde_json::from_str(&body_text).map_err(|e| StoreError::Backend(e.to_string()))?;
-            let meta = Meta {
+            let body: Value = serde_json::from_str(&body_text)?;
+            Ok(DataItem {
                 id,
-                created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-                    .map_err(|e| StoreError::Backend(e.to_string()))?
-                    .with_timezone(&chrono::Utc),
-                updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-                    .map_err(|e| StoreError::Backend(e.to_string()))?
-                    .with_timezone(&chrono::Utc),
+                body,
+                created_at: chrono::DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&chrono::Utc),
+                updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)?.with_timezone(&chrono::Utc),
                 owner,
                 unique: Some(unique.to_string()),
-            };
-            Ok((body, meta))
+            })
         } else {
-            Err(StoreError::NotFound)
+            Err(StoreError::NotFound("Get Data by Unique".to_string()))
         }
     }
 
     fn update(&self, collection: &str, id: &Id, body: &Value) -> StoreResult<Meta> {
         // validate data, ensure collection table exists and schema validated
         self.validate_against_schema(collection, body)?;
-        let body_text = serde_json::to_string(body).map_err(|e| StoreError::Backend(e.to_string()))?;
+        let body_text = serde_json::to_string(body)?;
         let updated_at = chrono::Utc::now().to_rfc3339();
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
@@ -449,27 +475,23 @@ impl Backend for SqliteBackend {
             "UPDATE {} SET body = ?1, updated_at = ?2, uniq = ?3 WHERE id = ?4",
             table
         );
-        let n = conn
-            .execute(&sql, params![body_text, updated_at, unique, id])
-            .map_err(|e| StoreError::Backend(e.to_string()))?;
+        let n = conn.execute(&sql, params![body_text, updated_at, unique, id])?;
         if n == 0 {
-            return Err(StoreError::NotFound);
+            return Err(StoreError::NotFound("Update Data".to_string()));
         }
 
         // read back meta
-        let (_body, meta) = self.get(collection, id)?;
-        Ok(meta)
+        let item = self.get(collection, id)?;
+        Ok(item.into())
     }
 
     fn delete(&self, collection: &str, id: &Id) -> StoreResult<()> {
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
         let sql = format!("DELETE FROM {} WHERE id = ?1", table);
-        let n = conn
-            .execute(&sql, params![id])
-            .map_err(|e| StoreError::Backend(e.to_string()))?;
+        let n = conn.execute(&sql, params![id])?;
         if n == 0 {
-            return Err(StoreError::NotFound);
+            return Err(StoreError::NotFound("Delete Data".to_string()));
         }
         Ok(())
     }

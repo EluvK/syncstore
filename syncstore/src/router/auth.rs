@@ -17,6 +17,14 @@ static COOKIE_HTTPS_ONLY: bool = false; // TODO: set to true in production
 
 pub fn create_router() -> Router {
     Router::new()
+        .push(Router::with_path("edit").post(edit))
+        .oapi_tag("auth_info")
+}
+
+#[endpoint]
+async fn edit() -> ServiceResult<()> {
+    tracing::info!("edit called");
+    Ok(())
 }
 
 pub fn create_non_auth_router() -> Router {
@@ -42,6 +50,7 @@ async fn login(
     depot: &mut Depot,
     resp: &mut Response,
 ) -> ServiceResult<LoginResponse> {
+    tracing::info!("Login attempt for user: {}", req.username);
     let user_manager = depot.obtain::<Arc<Store>>()?.user_manager.clone();
     let Some(user_id) = user_manager.validate_user(&req.username, &req.password)? else {
         return Err(ServiceError::Unauthorized("Invalid username or password".to_string()));

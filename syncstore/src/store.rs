@@ -5,7 +5,7 @@ use serde_json::Value;
 use crate::backend::Backend;
 use crate::components::{DataManager, UserManager};
 use crate::error::StoreResult;
-use crate::types::{Id, Meta, Uid};
+use crate::types::{DataItem, Id, Meta, Uid};
 
 pub struct Store {
     pub data_manager: Arc<DataManager>,
@@ -35,7 +35,7 @@ impl Store {
         backend.insert(collection, body, meta)
     }
 
-    pub fn get(&self, namespace: &str, collection: &str, id: &Id) -> StoreResult<(Value, Meta)> {
+    pub fn get(&self, namespace: &str, collection: &str, id: &Id) -> StoreResult<DataItem> {
         let backend = self.data_manager.backend_for(namespace)?;
         backend.get(collection, id)
     }

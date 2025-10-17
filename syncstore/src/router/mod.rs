@@ -33,6 +33,7 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
         .hoop(auth_handler)
         .hoop(jwt_to_user)
         .push(Router::with_path("auth").push(auth::create_router()))
+        .push(Router::with_path("data").push(data::create_router()))
         .oapi_security(SecurityRequirement::new("bearer", vec!["bearer"]));
     Router::new()
         .hoop(affix_state::inject(store))

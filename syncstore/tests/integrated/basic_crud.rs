@@ -35,7 +35,8 @@ fn basic_crud() -> Result<(), Box<dyn std::error::Error>> {
     let id = meta_insert.id.clone();
 
     // get
-    let (body, meta_get) = store.get(namespace, "post", &id)?;
+    let item = store.get(namespace, "post", &id)?;
+    let body = item.body;
     assert_eq!(body["title"], "Welcome");
     assert_eq!(body["author"], "system");
 
@@ -46,11 +47,11 @@ fn basic_crud() -> Result<(), Box<dyn std::error::Error>> {
     }
     let updated_meta = store.update(namespace, "post", &id, &updated)?;
     // basic sanity: updated_at should be >= created_at (depends on backend precision)
-    assert!(updated_meta.updated_at >= updated_meta.created_at || updated_meta.updated_at > meta_get.updated_at);
+    assert!(updated_meta.updated_at >= updated_meta.created_at || updated_meta.updated_at > item.created_at);
 
     // get again and verify the flag
-    let (body2, _) = store.get(namespace, "post", &id)?;
-    assert_eq!(body2["updated"], true);
+    let item = store.get(namespace, "post", &id)?;
+    assert_eq!(item.body["updated"], true);
 
     // cleanup - best effort
     let _ = fs::remove_dir_all(&tmp);

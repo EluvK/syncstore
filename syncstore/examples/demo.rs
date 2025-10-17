@@ -34,11 +34,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Inserted id: {}", meta.id);
 
     // get
-    let (body, meta) = store.get(namespace, "post", &meta.id)?;
-    println!("Got doc: {}", body);
+    let item = store.get(namespace, "post", &meta.id)?;
+    println!("Got doc: {}", item.body);
 
     // update: add a flag
-    let mut updated = body.clone();
+    let mut updated = item.body.clone();
     if let serde_json::Value::Object(ref mut map) = updated {
         map.insert("updated".to_string(), json!(true));
     }
@@ -46,8 +46,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Updated at: {}", updated_meta.updated_at);
 
     // get again
-    let (body2, _) = store.get(namespace, "post", &meta.id)?;
-    println!("After update: {}", body2);
+    let item = store.get(namespace, "post", &meta.id)?;
+    println!("After update: {}", item.body);
 
     // delete
     // store.delete(namespace, "post", &meta.id)?;

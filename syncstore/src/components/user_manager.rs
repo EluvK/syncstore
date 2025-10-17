@@ -51,18 +51,18 @@ impl UserManager {
     }
 
     pub fn validate_user(&self, username: &str, password: &str) -> StoreResult<Option<String>> {
-        if let Ok((value, meta)) = self.backend.get_by_unique(UserManager::USER_TABLE, username)
-            && value.get("password") == Some(&serde_json::json!(password))
+        if let Ok(item) = self.backend.get_by_unique(UserManager::USER_TABLE, username)
+            && item.body.get("password") == Some(&serde_json::json!(password))
         {
-            Ok(Some(meta.id))
+            Ok(Some(item.id))
         } else {
             Ok(None)
         }
     }
 
     pub fn get_user(&self, user_id: &String) -> StoreResult<String> {
-        let (_value, meta) = self.backend.get(UserManager::USER_TABLE, user_id)?;
-        Ok(meta.id)
+        let item = self.backend.get(UserManager::USER_TABLE, user_id)?;
+        Ok(item.id)
     }
 }
 

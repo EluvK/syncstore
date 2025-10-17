@@ -43,6 +43,29 @@ pub struct Meta {
     // pub references: Vec<Reference>,
 }
 
+/// DataItem = Meta + Json Value Body, all flatten.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, salvo::oapi::ToSchema, salvo::oapi::ToResponse)]
+pub struct DataItem {
+    pub id: Id,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub owner: Uid,
+    pub unique: Option<String>,
+    pub body: serde_json::Value,
+}
+
+impl From<DataItem> for Meta {
+    fn from(value: DataItem) -> Self {
+        Self {
+            id: value.id,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+            owner: value.owner,
+            unique: value.unique,
+        }
+    }
+}
+
 impl Meta {
     // todo maybe add a schema param later to construct references
     pub fn new(owner: Uid, unique: Option<String>) -> Self {

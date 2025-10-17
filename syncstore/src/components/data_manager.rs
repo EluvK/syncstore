@@ -24,7 +24,7 @@ impl DataManager {
     pub fn backend_for(&self, namespace: &str) -> StoreResult<Arc<SqliteBackend>> {
         match self.map.get(namespace) {
             Some(b) => Ok(b.clone()),
-            None => Err(StoreError::NotFound),
+            None => Err(StoreError::NotFound(namespace.to_string())),
         }
     }
 }
