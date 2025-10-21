@@ -54,6 +54,12 @@ pub struct DataItem {
     pub body: serde_json::Value,
 }
 
+impl salvo::Scribe for DataItem {
+    fn render(self, res: &mut salvo::Response) {
+        res.render(salvo::writing::Json(self));
+    }
+}
+
 impl From<DataItem> for Meta {
     fn from(value: DataItem) -> Self {
         Self {

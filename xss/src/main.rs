@@ -22,6 +22,19 @@ async fn main() -> anyhow::Result<()> {
             },
             "required": ["name", "status"],
             "x-unique": "name",
+        }),
+        "post" => json!({
+            "type": "object",
+            "properties": {
+                "title": { "type": "string" },
+                "category": { "type": "string" },
+                "content": { "type": "string" },
+                "repo_id": { "type": "string" }
+            },
+            "required": ["title", "repo_id"],
+            "x-parent-id": [
+                { "field": "repo_id", "collection": "repo" }
+            ],
         })
     };
     let data_manager = DataManagerBuilder::new("./db_test").add_db("xbb", xbb_schema)?.build();

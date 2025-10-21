@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // insert
     let doc = json!({ "title": "Welcome", "author": "system" });
-    let meta = store.insert(namespace, "post", &doc, "system".to_string(), None)?;
+    let meta = store.insert(namespace, "post", &doc, "system".to_string())?;
     println!("Inserted id: {}", meta.id);
 
     // get

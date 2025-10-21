@@ -31,7 +31,7 @@ fn basic_crud() -> Result<(), Box<dyn std::error::Error>> {
 
     // insert
     let doc = json!({ "title": "Welcome", "author": "system" });
-    let meta_insert = store.insert(namespace, "post", &doc, "system".to_string(), None)?;
+    let meta_insert = store.insert(namespace, "post", &doc, "system".to_string())?;
     let id = meta_insert.id.clone();
 
     // get

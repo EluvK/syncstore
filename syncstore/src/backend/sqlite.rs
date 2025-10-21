@@ -21,6 +21,100 @@ mod checker {
         SqliteConnectionManager,
         rusqlite::{OptionalExtension, params},
     };
+    use serde::Deserialize;
+
+    use crate::backend::sqlite::sanitize_table_name;
+
+    #[derive(Debug, Clone, Deserialize)]
+    pub struct XParentIdMeta {
+        pub field: String,
+        pub collection: String,
+        // pub column: String,
+        // pub owner_match: bool,
+    }
+
+    pub struct XParentId {
+        pub pool: Arc<Pool<SqliteConnectionManager>>,
+        pub meta: Vec<XParentIdMeta>,
+    }
+
+    impl Keyword for XParentId {
+        fn validate<'i>(
+            &self,
+            instance: &'i serde_json::Value,
+            location: &jsonschema::paths::LazyLocation,
+        ) -> Result<(), jsonschema::ValidationError<'i>> {
+            let location: Location = (&location.clone()).into();
+
+            let msg_err =
+                |msg: String| jsonschema::ValidationError::custom(location.clone(), location.clone(), instance, msg);
+
+            for m in &self.meta {
+                tracing::info!("x_parent[validate] check meta: {:?}", m);
+                let Some(value) = instance.get(&m.field).and_then(|f| f.as_str()) else {
+                    return Err(msg_err("x_parent: field value missing or not string".into()));
+                };
+                let Ok(conn) = self.pool.get() else {
+                    return Err(msg_err("x_parent: failed to get db connection".into()));
+                };
+                let sql = format!(
+                    "SELECT body, owner FROM {} WHERE id = ?1 LIMIT 1",
+                    sanitize_table_name(&m.collection),
+                );
+                let data = conn
+                    .query_row(&sql, params![value], |r| {
+                        let body_text: String = r.get(0)?;
+                        let owner: String = r.get(1)?;
+                        Ok((body_text, owner))
+                    })
+                    .optional()
+                    .map_err(|e| msg_err(format!("x_parent: db query error: {}", e)))?;
+                let Some((body_text, parent_owner)) = data else {
+                    return Err(msg_err(format!(
+                        "x_parent: parent id '{}' not found in {}",
+                        value, m.collection
+                    )));
+                };
+                tracing::info!(
+                    "x_parent found parent record: body={}, owner={}",
+                    body_text,
+                    parent_owner
+                );
+                let _body: serde_json::Value = serde_json::from_str(&body_text).map_err(|e| msg_err(e.to_string()))?;
+            }
+            Ok(())
+        }
+
+        fn is_valid(&self, instance: &serde_json::Value) -> bool {
+            for m in &self.meta {
+                tracing::info!("x_parent[is_valid] check meta: {:?}", m);
+                let sql = format!(
+                    "SELECT body, owner FROM {} WHERE id = ?1 LIMIT 1",
+                    sanitize_table_name(&m.collection)
+                );
+                if let Some(value) = instance.get(&m.field).and_then(|f| f.as_str())
+                    && let Ok(conn) = self.pool.get()
+                    && let Ok(Some((_body_text, _parent_owner))) = conn
+                        .query_row(&sql, params![value], |r| {
+                            let body_text: String = r.get(0)?;
+                            let owner: String = r.get(1)?;
+                            Ok((body_text, owner))
+                        })
+                        .optional()
+                // && let Ok(body) = serde_json::from_str::<serde_json::Value>(&body_text)
+                // && let Some(field_value) = body.get(&m.field).and_then(|f| f.as_str())
+                {
+                    // if self.owner_match {
+                    //     return self.owner == parent_owner;
+                    // }
+                    // return true;
+                } else {
+                    return false;
+                }
+            }
+            true
+        }
+    }
 
     pub struct DBExists {
         pub pool: Arc<Pool<SqliteConnectionManager>>,
@@ -232,9 +326,42 @@ impl SqliteBackend {
                 column,
             }))
         }
-        let compiled = jsonschema::draft7::options().with_keyword("db_exists", move |parent, value, path| {
-            db_exists_func(parent, value, path, pool.clone())
-        });
+        fn x_parent_id_check<'a>(
+            _parent: &'a serde_json::Map<String, Value>,
+            value: &'a Value,
+            _path: jsonschema::paths::Location,
+            pool: Arc<Pool<SqliteConnectionManager>>,
+        ) -> Result<Box<dyn jsonschema::Keyword>, jsonschema::ValidationError<'a>> {
+            tracing::info!("more: value: {value:?}");
+            tracing::info!("more: _parent: {:?}", _parent);
+            let meta = serde_json::from_value(value.clone()).map_err(|e| {
+                jsonschema::ValidationError::custom(
+                    _path.clone(),
+                    _path.clone(),
+                    value,
+                    &format!("x-parents: invalid meta format: {}", e),
+                )
+            })?;
+            tracing::info!("create parent check meta: {:?}", meta);
+            Ok(Box::new(checker::XParentId {
+                pool: pool.clone(),
+                meta,
+                // collection,
+                // column,
+                // field,
+                // field_value: todo!(),
+                // owner: todo!(),
+                // owner_match: todo!(),
+            }))
+        }
+
+        let compiled = jsonschema::draft7::options()
+            // .with_keyword("db_exists", move |parent, value, path| {
+            //     db_exists_func(parent, value, path, pool.clone())
+            // })
+            .with_keyword("x-parent-id", move |parent, value, path| {
+                x_parent_id_check(parent, value, path, pool.clone())
+            });
         let compiled = compiled
             .build(schema)
             .map_err(|e| StoreError::Validation(format!("invalid schema: {}", e)))?;
@@ -367,6 +494,7 @@ impl Backend for SqliteBackend {
              LIMIT ?2",
             table
         );
+        tracing::info!("list sql: {}, {}", sql, limit);
         let mut stmt = conn.prepare(&sql)?;
         let mut rows = stmt.query(params![marker, limit as i64])?;
         let mut items = Vec::new();

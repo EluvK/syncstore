@@ -22,16 +22,9 @@ impl Store {
     }
 
     /// Insert a document body. Returns meta including generated id.
-    pub fn insert(
-        &self,
-        namespace: &str,
-        collection: &str,
-        body: &Value,
-        owner: Uid,
-        unique: Option<String>,
-    ) -> StoreResult<Meta> {
+    pub fn insert(&self, namespace: &str, collection: &str, body: &Value, owner: Uid) -> StoreResult<Meta> {
         let backend = self.data_manager.backend_for(namespace)?;
-        let meta = Meta::new(owner, unique);
+        let meta = Meta::new(owner, None);
         backend.insert(collection, body, meta)
     }
 
