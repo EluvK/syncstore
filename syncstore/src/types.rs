@@ -38,6 +38,7 @@ pub struct Meta {
     pub updated_at: DateTime<Utc>,
     pub owner: Uid,
     pub unique: Option<String>,
+    pub parent_id: Option<String>
     // should constructed from schema, only used in memory, not serialized to DB
     // #[serde(skip)]
     // pub references: Vec<Reference>,
@@ -51,6 +52,7 @@ pub struct DataItem {
     pub updated_at: DateTime<Utc>,
     pub owner: Uid,
     pub unique: Option<String>,
+    pub parent_id: Option<String>,
     pub body: serde_json::Value,
 }
 
@@ -68,6 +70,7 @@ impl From<DataItem> for Meta {
             updated_at: value.updated_at,
             owner: value.owner,
             unique: value.unique,
+            parent_id: value.parent_id,
         }
     }
 }
@@ -82,6 +85,7 @@ impl Meta {
             updated_at: now,
             owner,
             unique,
+            parent_id: None,
             // references: vec![],
         }
     }

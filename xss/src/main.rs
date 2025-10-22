@@ -32,9 +32,7 @@ async fn main() -> anyhow::Result<()> {
                 "repo_id": { "type": "string" }
             },
             "required": ["title", "repo_id"],
-            "x-parent-id": [
-                { "field": "repo_id", "collection": "repo" }
-            ],
+            "x-parent-id": { "parent": "repo", "field": "repo_id" },
         })
     };
     let data_manager = DataManagerBuilder::new("./db_test").add_db("xbb", xbb_schema)?.build();

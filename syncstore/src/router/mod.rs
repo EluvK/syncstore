@@ -55,8 +55,12 @@ async fn jwt_to_user(
     depot: &mut Depot,
     ctrl: &mut FlowCtrl,
 ) -> ServiceResult<()> {
-    match (depot.jwt_auth_state(), depot.jwt_auth_data::<JwtClaims>()) {
-        (JwtAuthState::Authorized, Some(jwt_token)) => {
+    match (
+        depot.jwt_auth_state(),
+        depot.jwt_auth_data::<JwtClaims>(),
+        depot.jwt_auth_error(),
+    ) {
+        (JwtAuthState::Authorized, Some(jwt_token), _) => {
             let claim = jwt_token.claims.clone();
             if claim.is_expired() {
                 tracing::info!("Unauthorized: JWT token expired");
@@ -75,12 +79,12 @@ async fn jwt_to_user(
             depot.insert("user_id", user_id.clone());
             ctrl.call_next(req, depot, res).await;
         }
-        (_, None) => {
-            tracing::info!("Unauthorized: No JWT token found");
-            res.render(ServiceError::Unauthorized("No JWT token found".to_string()));
+        (_, _, Some(jwt_error)) => {
+            tracing::info!("Unauthorized: JWT auth error: {}", jwt_error);
+            res.render(ServiceError::Unauthorized(format!("JWT auth error: {}", jwt_error)));
             ctrl.skip_rest();
         }
-        _ => {
+        (_, _, _) => {
             tracing::info!("Unauthorized: Invalid JWT token");
             res.render(ServiceError::Unauthorized("Invalid JWT token".to_string()));
             ctrl.skip_rest();
