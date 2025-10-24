@@ -38,10 +38,9 @@ pub struct Meta {
     pub updated_at: DateTime<Utc>,
     pub owner: Uid,
     pub unique: Option<String>,
-    pub parent_id: Option<String>
-    // should constructed from schema, only used in memory, not serialized to DB
-    // #[serde(skip)]
-    // pub references: Vec<Reference>,
+    pub parent_id: Option<String>, // should constructed from schema, only used in memory, not serialized to DB
+                                   // #[serde(skip)]
+                                   // pub references: Vec<Reference>,
 }
 
 /// DataItem = Meta + Json Value Body, all flatten.
@@ -89,6 +88,24 @@ impl Meta {
             // references: vec![],
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AccessControl {
+    pub data_id: String,
+    pub permissions: Vec<Permission>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Permission {
+    pub user: String,
+    pub access_level: AccessLevel,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AccessLevel {
+    Read,
+    Write,
 }
 
 /// Describe a reference from this record to another collection.field (refield is the referenced field).

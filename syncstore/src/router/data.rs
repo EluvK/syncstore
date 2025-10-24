@@ -3,19 +3,20 @@ use std::sync::Arc;
 use salvo::{
     Depot, Router, Scribe, Writer,
     oapi::{
-        ToResponse, ToSchema, endpoint,
+        RouterExt, ToResponse, ToSchema, endpoint,
         extract::{JsonBody, PathParam, QueryParam},
     },
     writing::Json,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{backend::Backend, error::ServiceResult, store::Store, types::DataItem};
+use crate::{error::ServiceResult, store::Store, types::DataItem};
 
 pub fn create_router() -> Router {
     Router::with_path("{namespace}/{collection}")
         .push(Router::new().post(create_data).get(list_data))
         .push(Router::with_path("{id}").get(get_data))
+        .oapi_tag("data")
 }
 
 /// List data items with pagination
@@ -29,24 +30,31 @@ pub fn create_router() -> Router {
 async fn list_data(
     namespace: PathParam<String>,
     collection: PathParam<String>,
-    limit: QueryParam<usize>,
+    parent_id: QueryParam<String, false>,
     marker: QueryParam<String, false>,
+    limit: QueryParam<usize>,
     depot: &mut Depot,
 ) -> ServiceResult<ListDataResponse> {
+    let user = depot.get::<String>("user_id")?;
     tracing::info!(
         "Listing data in namespace: {}, collection: {}",
         namespace.as_str(),
         collection.as_str()
     );
-    let data_manager = depot.obtain::<Arc<Store>>()?.data_manager.clone();
-    let backend = data_manager.backend_for(namespace.as_str())?;
     // limit must be positive
     let limit = match *limit {
         0 => 1,
         n if n > 1000 => 1000,
         n => n,
     };
-    let (items, next_marker) = backend.list(collection.as_str(), limit, marker.as_deref())?;
+    let (items, next_marker) = depot.obtain::<Arc<Store>>()?.list(
+        namespace.as_str(),
+        collection.as_str(),
+        parent_id.as_deref(),
+        limit,
+        marker.as_deref(),
+        &user,
+    )?;
     Ok(ListDataResponse {
         page_info: PageInfo {
             count: items.len(),
@@ -93,7 +101,8 @@ async fn get_data(
     depot: &mut Depot,
 ) -> ServiceResult<DataItem> {
     let store = depot.obtain::<Arc<Store>>()?;
-    Ok(store.get(&namespace, &collection, &id)?)
+    let user = depot.get::<String>("user_id")?;
+    Ok(store.get(&namespace, &collection, &id, &user)?)
 }
 
 /// Create a new data item
@@ -112,9 +121,9 @@ async fn create_data(
     req: JsonBody<serde_json::Value>,
     depot: &mut Depot,
 ) -> ServiceResult<String> {
-    let user_id = depot.get::<String>("user_id")?;
+    let user = depot.get::<String>("user_id")?;
     let store = depot.obtain::<Arc<Store>>()?;
-    let item = store.insert(&namespace, &collection, &req.0, user_id.clone())?;
+    let item = store.insert(&namespace, &collection, &req.0, &user)?;
     Ok(item.id)
 }
 
@@ -135,7 +144,8 @@ async fn update_data(
     req: JsonBody<serde_json::Value>,
     depot: &mut Depot,
 ) -> ServiceResult<String> {
+    let user = depot.get::<String>("user_id")?;
     let store = depot.obtain::<Arc<Store>>()?;
-    let item = store.update(&namespace, &collection, &id, &req.0)?;
+    let item = store.update(&namespace, &collection, &id, &req.0, &user)?;
     Ok(item.id)
 }

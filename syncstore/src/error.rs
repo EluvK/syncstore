@@ -17,6 +17,9 @@ pub enum StoreError {
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("permission denied")]
+    PermissionDenied,
 }
 
 pub type StoreResult<T> = std::result::Result<T, StoreError>;
@@ -52,6 +55,9 @@ impl Scribe for ServiceError {
                 }
                 StoreError::Validation(_) => {
                     res.status_code(StatusCode::BAD_REQUEST);
+                }
+                StoreError::PermissionDenied => {
+                    res.status_code(StatusCode::FORBIDDEN);
                 }
                 _ => {
                     res.status_code(StatusCode::INTERNAL_SERVER_ERROR);

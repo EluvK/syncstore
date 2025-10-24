@@ -16,6 +16,8 @@ pub struct UserManager {
 impl UserManager {
     const USER_TABLE: &str = "users";
 
+    const ROOT_OWNER: &str = "root";
+
     pub fn new(base_dir: impl AsRef<Path>) -> StoreResult<Self> {
         let mut path = base_dir.as_ref().to_path_buf();
         std::fs::create_dir_all(&path)?;
@@ -45,13 +47,15 @@ impl UserManager {
             "password": password
         });
         // todo lots of works here...
-        let meta = Meta::new("root".to_string(), Some(username.to_string()));
+        let meta = Meta::new(UserManager::ROOT_OWNER.to_string(), Some(username.to_string()));
         self.backend.insert(UserManager::USER_TABLE, &user, meta)?;
         Ok(())
     }
 
     pub fn validate_user(&self, username: &str, password: &str) -> StoreResult<Option<String>> {
-        if let Ok(item) = self.backend.get_by_unique(UserManager::USER_TABLE, username)
+        if let Ok(item) = self
+            .backend
+            .get_by_unique(UserManager::USER_TABLE, username, UserManager::ROOT_OWNER)
             && item.body.get("password") == Some(&serde_json::json!(password))
         {
             Ok(Some(item.id))
@@ -61,7 +65,9 @@ impl UserManager {
     }
 
     pub fn get_user(&self, user_id: &String) -> StoreResult<String> {
-        let item = self.backend.get(UserManager::USER_TABLE, user_id)?;
+        let item = self
+            .backend
+            .get(UserManager::USER_TABLE, user_id, UserManager::ROOT_OWNER)?;
         Ok(item.id)
     }
 }

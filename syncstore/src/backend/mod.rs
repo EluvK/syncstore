@@ -11,21 +11,23 @@ pub trait Backend: Send + Sync {
     fn list(
         &self,
         collection: &str,
+        parent_id: Option<&str>,
         limit: usize,
         marker: Option<&str>,
+        user: &str,
     ) -> StoreResult<(Vec<DataItem>, Option<String>)>;
 
     /// Get a document by id.
-    fn get(&self, collection: &str, id: &Id) -> StoreResult<DataItem>;
+    fn get(&self, collection: &str, id: &Id, user: &str) -> StoreResult<DataItem>;
 
     /// Get a document by unique field.
-    fn get_by_unique(&self, collection: &str, unique: &str) -> StoreResult<DataItem>;
+    fn get_by_unique(&self, collection: &str, unique: &str, user: &str) -> StoreResult<DataItem>;
 
     /// Update an existing document by id. Returns updated meta.
-    fn update(&self, collection: &str, id: &Id, body: &Value) -> StoreResult<Meta>;
+    fn update(&self, collection: &str, id: &Id, body: &Value, user: &str) -> StoreResult<Meta>;
 
     /// Delete a document by id.
-    fn delete(&self, collection: &str, id: &Id) -> StoreResult<()>;
+    fn delete(&self, collection: &str, id: &Id, user: &str) -> StoreResult<()>;
 }
 
 pub mod sqlite;

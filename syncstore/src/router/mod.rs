@@ -1,3 +1,4 @@
+mod acl;
 mod admin;
 mod auth;
 mod data;
@@ -32,6 +33,7 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
     let auth_router = Router::new()
         .hoop(auth_handler)
         .hoop(jwt_to_user)
+        .push(Router::with_path("acl").push(acl::create_router()))
         .push(Router::with_path("auth").push(auth::create_router()))
         .push(Router::with_path("data").push(data::create_router()))
         .oapi_security(SecurityRequirement::new("bearer", vec!["bearer"]));
