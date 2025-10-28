@@ -59,7 +59,7 @@ async fn list_data(
         parent_id.as_str(),
         marker.as_deref(),
         limit,
-        &user,
+        user,
     )?;
     Ok(ListDataResponse {
         page_info: PageInfo {
@@ -108,7 +108,7 @@ async fn get_data(
 ) -> ServiceResult<DataItem> {
     let store = depot.obtain::<Arc<Store>>()?;
     let user = depot.get::<String>("user_id")?;
-    Ok(store.get(&namespace, &collection, &id, &user)?)
+    Ok(store.get(&namespace, &collection, &id, user)?)
 }
 
 /// Create a new data item
@@ -129,7 +129,7 @@ async fn create_data(
 ) -> ServiceResult<String> {
     let user = depot.get::<String>("user_id")?;
     let store = depot.obtain::<Arc<Store>>()?;
-    let item = store.insert(&namespace, &collection, &req.0, &user)?;
+    let item = store.insert(&namespace, &collection, &req.0, user)?;
     Ok(item.id)
 }
 
@@ -153,7 +153,7 @@ async fn update_data(
 ) -> ServiceResult<String> {
     let user = depot.get::<String>("user_id")?;
     let store = depot.obtain::<Arc<Store>>()?;
-    let item = store.update(&namespace, &collection, &id, &req.0, &user)?;
+    let item = store.update(&namespace, &collection, &id, &req.0, user)?;
     Ok(item.id)
 }
 
@@ -175,7 +175,7 @@ async fn delete_data(
 ) -> ServiceResult<()> {
     let user = depot.get::<String>("user_id")?;
     let store = depot.obtain::<Arc<Store>>()?;
-    store.delete(&namespace, &collection, &id, &user)?;
+    store.delete(&namespace, &collection, &id, user)?;
     resp.status_code(StatusCode::NO_CONTENT);
     Ok(())
 }

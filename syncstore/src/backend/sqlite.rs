@@ -158,7 +158,7 @@ mod checker {
                         location.clone(),
                         location.clone(),
                         instance,
-                        &format!("db_exists: db query error: {}", e),
+                        format!("db_exists: db query error: {}", e),
                     )
                 })?
                 .is_some();
@@ -168,7 +168,7 @@ mod checker {
                     location.clone(),
                     location,
                     instance,
-                    &format!(
+                    format!(
                         "db_exists: value '{}' not found in {}.{}",
                         value, self.collection, self.column
                     ),
@@ -344,7 +344,7 @@ impl SqliteBackend {
                     _path.clone(),
                     _path.clone(),
                     value,
-                    &format!("x-parents: invalid meta format: {}", e),
+                    format!("x-parents: invalid meta format: {}", e),
                 )
             })?;
             tracing::info!("create parent check meta: {:?}", meta);

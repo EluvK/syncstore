@@ -107,7 +107,7 @@ mod checker {
                 ));
             };
 
-            let sql = format!("SELECT 1 FROM __users WHERE id = ?1 LIMIT 1");
+            let sql = "SELECT 1 FROM __users WHERE id = ?1 LIMIT 1".to_string();
             // println!("db_exists check sql: {}", sql);
             let exists = conn
                 .query_row(&sql, params![user_id], |_| Ok(()))
@@ -117,7 +117,7 @@ mod checker {
                         location.clone(),
                         location.clone(),
                         instance,
-                        &format!("user exist db query error: {}", e),
+                        format!("user exist db query error: {}", e),
                     )
                 })?
                 .is_some();
@@ -127,7 +127,7 @@ mod checker {
                     location.clone(),
                     location,
                     instance,
-                    &format!("user id '{}' does not exist in users collection", user_id),
+                    format!("user id '{}' does not exist in users collection", user_id),
                 ));
             }
 
@@ -135,7 +135,7 @@ mod checker {
         }
 
         fn is_valid(&self, instance: &serde_json::Value) -> bool {
-            let sql = format!("SELECT 1 FROM __users WHERE id = ?1 LIMIT 1");
+            let sql = "SELECT 1 FROM __users WHERE id = ?1 LIMIT 1".to_string();
             if let Some(user_id) = instance.as_str()
                 && let Ok(conn) = self.pool.get()
                 && let Ok(Some(_)) = conn.query_row(&sql, params![user_id], |_| Ok(())).optional()

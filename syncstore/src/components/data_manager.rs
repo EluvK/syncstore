@@ -83,6 +83,12 @@ pub struct DataSchemasBuilder {
     map: HashMap<String, serde_json::Value>,
 }
 
+impl Default for DataSchemasBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DataSchemasBuilder {
     pub fn new() -> Self {
         Self { map: HashMap::new() }

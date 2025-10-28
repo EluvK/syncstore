@@ -82,8 +82,7 @@ impl From<Option<&Box<dyn Any + Send + Sync>>> for ServiceError {
     fn from(value: Option<&Box<dyn Any + Send + Sync>>) -> Self {
         ServiceError::InternalServerError(
             value
-                .and_then(|v| v.downcast_ref::<String>())
-                .map(|s| s.clone())
+                .and_then(|v| v.downcast_ref::<String>()).cloned()
                 .unwrap_or_else(|| "Unknown error".to_string()),
         )
     }

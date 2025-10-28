@@ -82,9 +82,9 @@ impl Store {
                 collection
             )));
         };
-        let parent_data = backend.get(&parent_collection, &parent_id.to_string())?;
+        let parent_data = backend.get(parent_collection, &parent_id.to_string())?;
         // check permission on parent data
-        if !self.check_permission((namespace, &parent_collection), &parent_data, user, &AccessLevel::Read)? {
+        if !self.check_permission((namespace, parent_collection), &parent_data, user, &AccessLevel::Read)? {
             return Err(StoreError::PermissionDenied);
         }
         backend.list(collection, parent_id, marker, limit)
@@ -149,8 +149,8 @@ impl Store {
         if let Some(parent_id) = data.parent_id.as_ref()
             && let Some(parent_collection) = backend.parent_collection(collection)
         {
-            let parent_data = backend.get(&parent_collection, parent_id)?;
-            return self.check_permission((namespace, &parent_collection), &parent_data, user, access_level);
+            let parent_data = backend.get(parent_collection, parent_id)?;
+            return self.check_permission((namespace, parent_collection), &parent_data, user, access_level);
         }
         Ok(false)
     }
