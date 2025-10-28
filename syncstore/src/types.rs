@@ -38,9 +38,7 @@ pub struct Meta {
     pub updated_at: DateTime<Utc>,
     pub owner: Uid,
     pub unique: Option<String>,
-    pub parent_id: Option<String>, // should constructed from schema, only used in memory, not serialized to DB
-                                   // #[serde(skip)]
-                                   // pub references: Vec<Reference>,
+    pub parent_id: Option<String>,
 }
 
 /// DataItem = Meta + Json Value Body, all flatten.
@@ -75,7 +73,6 @@ impl From<DataItem> for Meta {
 }
 
 impl Meta {
-    // todo maybe add a schema param later to construct references
     pub fn new(owner: Uid, unique: Option<String>) -> Self {
         let now = Utc::now();
         Self {
@@ -85,24 +82,23 @@ impl Meta {
             owner,
             unique,
             parent_id: None,
-            // references: vec![],
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, salvo::oapi::ToSchema)]
 pub struct AccessControl {
     pub data_id: String,
     pub permissions: Vec<Permission>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, salvo::oapi::ToSchema)]
 pub struct Permission {
     pub user: String,
     pub access_level: AccessLevel,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, salvo::oapi::ToSchema)]
 pub enum AccessLevel {
     Read,
     Edit,
@@ -116,45 +112,6 @@ impl AccessLevel {
             | (AccessLevel::Edit, AccessLevel::Edit | AccessLevel::Read)
             | (AccessLevel::Read, AccessLevel::Read) => true,
             _ => false,
-        }
-    }
-}
-
-/// Describe a reference from this record to another collection.field (refield is the referenced field).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Reference {
-    /// referenced field name in current collection.field
-    pub refield: String,
-    /// target collection name, e.g. "user"
-    pub collection: String,
-    /// target field name within collection, e.g. "id"
-    pub field: String,
-    /// whether the reference is a "belongs to" relationship, mostly true
-    pub belongs: bool,
-}
-
-impl Reference {
-    pub fn new<S>(refield: S, collection: S, field: S) -> Self
-    where
-        S: Into<String>,
-    {
-        Self {
-            collection: collection.into(),
-            field: field.into(),
-            refield: refield.into(),
-            belongs: true,
-        }
-    }
-
-    pub fn new_non_belongs<S>(refield: S, collection: S, field: S) -> Self
-    where
-        S: Into<String>,
-    {
-        Self {
-            collection: collection.into(),
-            field: field.into(),
-            refield: refield.into(),
-            belongs: false,
         }
     }
 }

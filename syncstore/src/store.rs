@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::backend::Backend;
-use crate::components::{AclManager, DataManager, UserManager};
+use crate::components::{AclManager, DataManager, DataManagerBuilder, DataSchemas, UserManager};
 use crate::error::{StoreError, StoreResult};
 use crate::types::{AccessControl, AccessLevel, DataItem, Id, Meta};
 
@@ -14,14 +14,30 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn new(manager: Arc<DataManager>) -> Self {
-        let user_manager = Arc::new(UserManager::new("./db_test/inner").unwrap());
-        let acl_manager = Arc::new(AclManager::new("./db_test/inner").unwrap());
-        Self {
-            data_manager: manager,
+    pub fn build(base_dir: impl AsRef<std::path::Path>, dbs: Vec<(&str, DataSchemas)>) -> StoreResult<Arc<Self>> {
+        let path = base_dir.as_ref().to_path_buf();
+        let inner_path = path.join("inner");
+        std::fs::create_dir_all(&inner_path)?;
+
+        let mut data_manager = DataManagerBuilder::new(&path);
+        for (db_name, schemas) in dbs {
+            match db_name {
+                "memory" => {
+                    data_manager = data_manager.add_memory_db(schemas)?;
+                }
+                _ => {
+                    data_manager = data_manager.add_db(db_name, schemas)?;
+                }
+            }
+        }
+        let data_manager = Arc::new(data_manager.build());
+        let user_manager = Arc::new(UserManager::new(&inner_path)?);
+        let acl_manager = Arc::new(AclManager::new(&inner_path)?);
+        Ok(Arc::new(Self {
+            data_manager,
             user_manager,
             acl_manager,
-        }
+        }))
     }
 }
 

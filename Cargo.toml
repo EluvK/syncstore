@@ -19,6 +19,7 @@ r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
 salvo = { version = "0.84.1", features = ["affix-state", "jwt-auth", "oapi"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.143"
+tempfile = "3.23.0"
 thiserror = "2.0.17"
 tokio = { version = "1.47.1", features = ["full"] }
 tracing = "0.1.41"
