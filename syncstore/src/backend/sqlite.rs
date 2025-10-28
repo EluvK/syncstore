@@ -252,9 +252,8 @@ pub struct SqliteBackend {
 }
 
 impl SqliteBackend {
-    // shared connection pool
-    pub(crate) fn pool(&self) -> Arc<Pool<SqliteConnectionManager>> {
-        self.pool.clone()
+    pub(crate) fn parent_collection(&self, collection: &str) -> Option<&str> {
+        self.parent_ref.get(collection).map(|m| m.parent.as_str())
     }
 
     fn new(pool: Arc<Pool<SqliteConnectionManager>>) -> Self {
@@ -431,29 +430,6 @@ impl SqliteBackend {
         Ok(None)
     }
 
-    // the user required for the data, but the owner not matched.
-    // this function should check:
-    // 1. whether there is an acl to allow this user access.
-    // 2. else the parent data is owned by this user.
-    // 3. else the parent data has an acl to allow this user access.
-    // ... try make it recursively.
-    fn check_ownership(
-        &self,
-        current_id: &str,
-        current_collection: &str,
-        parent_id: &str,
-        user: &str,
-    ) -> StoreResult<bool> {
-        let parent_collection = self
-            .parent_ref
-            .get(current_collection)
-            .ok_or_else(|| StoreError::Validation(format!("collection '{}' has no parent ref", current_collection)))?
-            .parent
-            .clone();
-
-        todo!()
-    }
-
     fn validate_against_schema(&self, collection: &str, body: &Value) -> StoreResult<()> {
         self.schema_validator
             .get(collection)
@@ -527,10 +503,9 @@ impl Backend for SqliteBackend {
     fn list(
         &self,
         collection: &str,
-        parent_id: Option<&str>,
-        limit: usize,
+        parent_id: &str,
         marker: Option<&str>,
-        user: &str,
+        limit: usize,
     ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
         let conn = self.get_conn()?;
         let table = sanitize_table_name(collection);
@@ -567,7 +542,7 @@ impl Backend for SqliteBackend {
         Ok((items, next_marker))
     }
 
-    fn get(&self, collection: &str, id: &Id, user: &str) -> StoreResult<DataItem> {
+    fn get(&self, collection: &str, id: &Id) -> StoreResult<DataItem> {
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
         let sql = format!(
@@ -588,9 +563,7 @@ impl Backend for SqliteBackend {
             })
             .optional()?;
 
-        if let Some((body_text, created_at, updated_at, owner, unique, parent_id)) = row
-            && (owner == user || true)
-        {
+        if let Some((body_text, created_at, updated_at, owner, unique, parent_id)) = row {
             let body: Value = serde_json::from_str(&body_text)?;
 
             Ok(DataItem {
@@ -607,7 +580,7 @@ impl Backend for SqliteBackend {
         }
     }
 
-    fn get_by_unique(&self, collection: &str, unique: &str, user: &str) -> StoreResult<DataItem> {
+    fn get_by_unique(&self, collection: &str, unique: &str) -> StoreResult<DataItem> {
         if !self.unique_fields.contains_key(collection) {
             return Err(StoreError::Validation(format!(
                 "collection '{}' does not have unique field defined",
@@ -648,7 +621,7 @@ impl Backend for SqliteBackend {
         }
     }
 
-    fn update(&self, collection: &str, id: &Id, body: &Value, user: &str) -> StoreResult<Meta> {
+    fn update(&self, collection: &str, id: &Id, body: &Value) -> StoreResult<Meta> {
         // validate data, ensure collection table exists and schema validated
         self.validate_against_schema(collection, body)?;
         let body_text = serde_json::to_string(body)?;
@@ -667,11 +640,11 @@ impl Backend for SqliteBackend {
         }
 
         // read back meta
-        let item = self.get(collection, id, user)?;
+        let item = self.get(collection, id)?;
         Ok(item.into())
     }
 
-    fn delete(&self, collection: &str, id: &Id, user: &str) -> StoreResult<()> {
+    fn delete(&self, collection: &str, id: &Id) -> StoreResult<()> {
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
         let sql = format!("DELETE FROM {} WHERE id = ?1", table);

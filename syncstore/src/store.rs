@@ -5,7 +5,7 @@ use serde_json::Value;
 use crate::backend::Backend;
 use crate::components::{AclManager, DataManager, UserManager};
 use crate::error::{StoreError, StoreResult};
-use crate::types::{AccessControl, DataItem, Id, Meta};
+use crate::types::{AccessControl, AccessLevel, DataItem, Id, Meta};
 
 pub struct Store {
     pub data_manager: Arc<DataManager>,
@@ -38,28 +38,89 @@ impl Store {
         &self,
         namespace: &str,
         collection: &str,
-        parent_id: Option<&str>,
-        limit: usize,
+        parent_id: &str,
         marker: Option<&str>,
+        limit: usize,
         user: &str,
     ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
+        // ? need to figure out how to check the acl for list operation...
+        // list operation should have access for the parent collection.
         let backend = self.data_manager.backend_for(namespace)?;
-        backend.list(collection, parent_id, limit, marker, user)
+        let Some(parent_collection) = backend.parent_collection(collection) else {
+            return Err(StoreError::NotFound(format!(
+                "no parent collection for current `{}`",
+                collection
+            )));
+        };
+        let parent_data = backend.get(&parent_collection, &parent_id.to_string())?;
+        // check permission on parent data
+        if !self.check_permission((namespace, &parent_collection), &parent_data, user, &AccessLevel::Read)? {
+            return Err(StoreError::PermissionDenied);
+        }
+        backend.list(collection, parent_id, marker, limit)
     }
 
     pub fn get(&self, namespace: &str, collection: &str, id: &Id, user: &str) -> StoreResult<DataItem> {
         let backend = self.data_manager.backend_for(namespace)?;
-        backend.get(collection, id, user)
+        let data = backend.get(collection, id)?;
+        // check permission
+        if !self.check_permission((namespace, collection), &data, user, &AccessLevel::Read)? {
+            return Err(StoreError::PermissionDenied);
+        }
+        Ok(data)
     }
 
     pub fn update(&self, namespace: &str, collection: &str, id: &Id, body: &Value, user: &str) -> StoreResult<Meta> {
         let backend = self.data_manager.backend_for(namespace)?;
-        backend.update(collection, id, body, user)
+        let data = backend.get(collection, id)?;
+        // check permission
+        if !self.check_permission((namespace, collection), &data, user, &AccessLevel::Edit)? {
+            return Err(StoreError::PermissionDenied);
+        }
+        backend.update(collection, id, body)
     }
 
     pub fn delete(&self, namespace: &str, collection: &str, id: &Id, user: &str) -> StoreResult<()> {
         let backend = self.data_manager.backend_for(namespace)?;
-        backend.delete(collection, id, user)
+        let data = backend.get(collection, id)?;
+        // check permission
+        if !self.check_permission((namespace, collection), &data, user, &AccessLevel::FullAccess)? {
+            return Err(StoreError::PermissionDenied);
+        }
+        backend.delete(collection, id)
+    }
+
+    /// 1. if the data owner is the user, allow
+    /// 2. else check directly acl
+    /// 3. else check parent data recursively
+    fn check_permission(
+        &self,
+        (namespace, collection): (&str, &str),
+        data: &DataItem,
+        user: &str,
+        access_level: &AccessLevel,
+    ) -> StoreResult<bool> {
+        // check owner
+        if data.owner == user {
+            return Ok(true);
+        }
+        // check ACL
+        if let Ok(acl) = self.acl_manager.get_acl(&data.id, user) {
+            for perm in acl.permissions {
+                if perm.user == user && perm.access_level.contains(access_level) {
+                    return Ok(true);
+                }
+            }
+        }
+        // check parent data recursively
+        let backend = self.data_manager.backend_for(namespace)?;
+        if let Some(parent_id) = data.parent_id.as_ref()
+            && let Some(parent_collection) = backend.parent_collection(collection)
+        {
+            let parent_data = backend.get(&parent_collection, parent_id)?;
+            return self.check_permission((namespace, &parent_collection), &parent_data, user, access_level);
+        }
+        Ok(false)
     }
 }
 

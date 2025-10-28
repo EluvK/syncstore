@@ -105,7 +105,19 @@ pub struct Permission {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AccessLevel {
     Read,
-    Write,
+    Edit,
+    FullAccess,
+}
+
+impl AccessLevel {
+    pub fn contains(&self, other: &AccessLevel) -> bool {
+        match (self, other) {
+            (AccessLevel::FullAccess, _)
+            | (AccessLevel::Edit, AccessLevel::Edit | AccessLevel::Read)
+            | (AccessLevel::Read, AccessLevel::Read) => true,
+            _ => false,
+        }
+    }
 }
 
 /// Describe a reference from this record to another collection.field (refield is the referenced field).
