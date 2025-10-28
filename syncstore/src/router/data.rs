@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use salvo::{
-    Depot, Router, Scribe, Writer,
+    Depot, Response, Router, Scribe, Writer,
+    http::StatusCode,
     oapi::{
         RouterExt, ToResponse, ToSchema, endpoint,
         extract::{JsonBody, PathParam, QueryParam},
@@ -15,7 +16,12 @@ use crate::{error::ServiceResult, store::Store, types::DataItem};
 pub fn create_router() -> Router {
     Router::with_path("{namespace}/{collection}")
         .push(Router::new().post(create_data).get(list_data))
-        .push(Router::with_path("{id}").get(get_data))
+        .push(
+            Router::with_path("{id}")
+                .get(get_data)
+                .post(update_data)
+                .delete(delete_data),
+        )
         .oapi_tag("data")
 }
 
@@ -127,6 +133,7 @@ async fn create_data(
     Ok(item.id)
 }
 
+/// Update an existing data item
 #[endpoint(
     status_codes(200, 400, 401, 404),
     request_body(content = String, description = "Data item to update"),
@@ -148,4 +155,27 @@ async fn update_data(
     let store = depot.obtain::<Arc<Store>>()?;
     let item = store.update(&namespace, &collection, &id, &req.0, &user)?;
     Ok(item.id)
+}
+
+/// Delete a data item
+#[endpoint(
+    status_codes(204, 401, 404),
+    responses(
+        (status_code = 204, description = "Data deleted successfully"),
+        (status_code = 401, description = "Unauthorized"),
+        (status_code = 404, description = "Data not found")
+    )
+)]
+async fn delete_data(
+    namespace: PathParam<String>,
+    collection: PathParam<String>,
+    id: PathParam<String>,
+    depot: &mut Depot,
+    resp: &mut Response,
+) -> ServiceResult<()> {
+    let user = depot.get::<String>("user_id")?;
+    let store = depot.obtain::<Arc<Store>>()?;
+    store.delete(&namespace, &collection, &id, &user)?;
+    resp.status_code(StatusCode::NO_CONTENT);
+    Ok(())
 }

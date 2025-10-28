@@ -110,6 +110,8 @@ impl Store {
         backend.update(collection, id, body)
     }
 
+    // todo delete might leave child data orphaned, need to consider how to handle it
+    // add a re-mapping relation?
     pub fn delete(&self, namespace: &str, collection: &str, id: &Id, user: &str) -> StoreResult<()> {
         let backend = self.data_manager.backend_for(namespace)?;
         let data = backend.get(collection, id)?;
