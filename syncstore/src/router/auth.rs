@@ -51,8 +51,8 @@ async fn login(
     resp: &mut Response,
 ) -> ServiceResult<LoginResponse> {
     tracing::info!("Login attempt for user: {}", req.username);
-    let user_manager = depot.obtain::<Arc<Store>>()?.user_manager.clone();
-    let Some(user_id) = user_manager.validate_user(&req.username, &req.password)? else {
+    let store = depot.obtain::<Arc<Store>>()?;
+    let Some(user_id) = store.validate_user(&req.username, &req.password)? else {
         return Err(ServiceError::Unauthorized("Invalid username or password".to_string()));
     };
     let access_token = generate_jwt_token(user_id.clone())?;

@@ -11,8 +11,8 @@ pub fn create_router() -> Router {
 
 #[handler]
 async fn register(body: JsonBody<RegisterRequest>, depot: &mut Depot, _resp: &mut Response) -> ServiceResult<()> {
-    let user_manager = depot.obtain::<Arc<Store>>()?.user_manager.clone();
-    user_manager.create_user(&body.username, &body.password)?;
+    let store = depot.obtain::<Arc<Store>>()?;
+    store.create_user(&body.username, &body.password)?;
     Ok(())
 }
 

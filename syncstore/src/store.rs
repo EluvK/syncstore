@@ -8,9 +8,9 @@ use crate::error::{StoreError, StoreResult};
 use crate::types::{AccessControl, AccessLevel, DataItem, Id, Meta};
 
 pub struct Store {
-    pub data_manager: Arc<DataManager>,
-    pub user_manager: Arc<UserManager>,
-    pub acl_manager: Arc<AclManager>,
+    data_manager: Arc<DataManager>,
+    user_manager: Arc<UserManager>,
+    acl_manager: Arc<AclManager>,
 }
 
 impl Store {
@@ -22,6 +22,20 @@ impl Store {
             user_manager,
             acl_manager,
         }
+    }
+}
+
+/// User management operations
+impl Store {
+    pub fn validate_user(&self, username: &str, password: &str) -> StoreResult<Option<String>> {
+        self.user_manager.validate_user(username, password)
+    }
+    pub fn get_user(&self, username: &String) -> StoreResult<String> {
+        self.user_manager.get_user(username)
+    }
+
+    pub fn create_user(&self, username: &str, password: &str) -> StoreResult<()> {
+        self.user_manager.create_user(username, password)
     }
 }
 
@@ -105,7 +119,7 @@ impl Store {
             return Ok(true);
         }
         // check ACL
-        if let Ok(acl) = self.acl_manager.get_acl(&data.id, user) {
+        if let Ok(acl) = self.acl_manager.get_acl(&data.id) {
             for perm in acl.permissions {
                 if perm.user == user && perm.access_level.contains(access_level) {
                     return Ok(true);
@@ -136,9 +150,17 @@ impl Store {
         Ok(())
     }
 
-    // (namespace, collection): (&str, &str),
-    pub fn get_acl(&self, data_id: &str, user: &str) -> StoreResult<AccessControl> {
-        let acl = self.acl_manager.get_acl(data_id, user)?;
+    pub fn get_acl(
+        &self,
+        (namespace, collection): (&str, &str),
+        data_id: &str,
+        user: &str,
+    ) -> StoreResult<AccessControl> {
+        let data = self.get(namespace, collection, &data_id.to_string(), user)?;
+        if data.owner != user {
+            return Err(StoreError::PermissionDenied);
+        }
+        let acl = self.acl_manager.get_acl(data_id)?;
         Ok(acl)
     }
 
@@ -148,7 +170,7 @@ impl Store {
         if data.owner != user {
             return Err(StoreError::PermissionDenied);
         }
-        self.acl_manager.update_acl(acl, user)?;
+        self.acl_manager.update_acl(acl)?;
         Ok(())
     }
 
@@ -159,7 +181,7 @@ impl Store {
         if data.owner != user {
             return Err(StoreError::PermissionDenied);
         }
-        self.acl_manager.delete_acl_by_data_id(data_id, user)?;
+        self.acl_manager.delete_acl_by_data_id(data_id)?;
         Ok(())
     }
 }

@@ -59,20 +59,20 @@ impl AclManager {
         Ok(())
     }
 
-    pub fn get_acl(&self, data_id: &str, user: &str) -> StoreResult<AccessControl> {
+    pub fn get_acl(&self, data_id: &str) -> StoreResult<AccessControl> {
         let acl_item = self.backend.get_by_unique(Self::ACL_TABLE, data_id)?;
         let acl: AccessControl = serde_json::from_value(acl_item.body)?;
         Ok(acl)
     }
 
-    pub fn update_acl(&self, acl: AccessControl, user: &str) -> StoreResult<()> {
+    pub fn update_acl(&self, acl: AccessControl) -> StoreResult<()> {
         let existing_acl = self.backend.get_by_unique(Self::ACL_TABLE, &acl.data_id)?;
         self.backend
             .update(Self::ACL_TABLE, &existing_acl.id, &serde_json::to_value(acl)?)?;
         Ok(())
     }
 
-    pub fn delete_acl_by_data_id(&self, data_id: &str, user: &str) -> StoreResult<()> {
+    pub fn delete_acl_by_data_id(&self, data_id: &str) -> StoreResult<()> {
         let existing_acl = self.backend.get_by_unique(Self::ACL_TABLE, data_id)?;
         self.backend.delete(Self::ACL_TABLE, &existing_acl.id)?;
         Ok(())

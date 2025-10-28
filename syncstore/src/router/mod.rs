@@ -70,8 +70,8 @@ async fn jwt_to_user(
                 ctrl.skip_rest();
                 return Ok(());
             }
-            let user_manager = depot.obtain::<Arc<Store>>()?.user_manager.clone();
-            let Ok(user_id) = user_manager.get_user(&claim.sub) else {
+            let store = depot.obtain::<Arc<Store>>()?;
+            let Ok(user_id) = store.get_user(&claim.sub) else {
                 tracing::info!("Unauthorized: User not found");
                 res.render(ServiceError::Unauthorized("User not found".to_string()));
                 ctrl.skip_rest();
