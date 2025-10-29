@@ -60,6 +60,13 @@ impl Store {
     /// Insert a document body. Returns meta including generated id.
     pub fn insert(&self, namespace: &str, collection: &str, body: &Value, user: &str) -> StoreResult<Meta> {
         let backend = self.data_manager.backend_for(namespace)?;
+        if let Some(parent_collection) = backend.parent_collection(collection) {
+            // check permission on parent collection if exist.
+            let parent_data = backend.get(parent_collection, &user.to_string())?;
+            if !self.check_permission((namespace, parent_collection), &parent_data, user, &AccessLevel::Write)? {
+                return Err(StoreError::PermissionDenied);
+            }
+        }
         let meta = Meta::new(user.to_string(), None);
         backend.insert(collection, body, meta)
     }

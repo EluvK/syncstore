@@ -102,6 +102,7 @@ pub struct Permission {
 pub enum AccessLevel {
     Read,
     Edit,
+    Write,
     FullAccess,
 }
 
@@ -109,6 +110,7 @@ impl AccessLevel {
     pub fn contains(&self, other: &AccessLevel) -> bool {
         match (self, other) {
             (AccessLevel::FullAccess, _)
+            | (AccessLevel::Write, AccessLevel::Write | AccessLevel::Read | AccessLevel::Edit)
             | (AccessLevel::Edit, AccessLevel::Edit | AccessLevel::Read)
             | (AccessLevel::Read, AccessLevel::Read) => true,
             _ => false,

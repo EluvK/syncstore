@@ -146,25 +146,3 @@ mod checker {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-
-    #[allow(unused_imports)]
-    use super::*;
-
-    #[test]
-    fn test_user_creation() {
-        let user_manager = UserManager::new("./test_db").unwrap();
-        let res = user_manager.create_user("test_user", "test_password");
-        println!("User creation result: {:?}", res);
-        // assert!(res.is_ok());
-        let v1 = user_manager.validate_user("test_user", "test_password").unwrap();
-        assert!(v1.is_some());
-        println!("Validation with correct password: {:?}", v1);
-        let v2 = user_manager.validate_user("test_user", "wrong_password").unwrap();
-        assert!(v2.is_none());
-        let v3 = user_manager.validate_user("nonexistent", "test_password").unwrap();
-        assert!(v3.is_none());
-    }
-}

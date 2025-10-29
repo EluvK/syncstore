@@ -1,7 +1,25 @@
 use std::{path::PathBuf, sync::Arc};
 
 use serde_json::json;
-use syncstore::{collection, store::Store};
+use syncstore::{
+    collection,
+    error::{StoreError, StoreResult},
+    store::Store,
+};
+
+pub fn assert_not_found<T: std::fmt::Debug>(result: StoreResult<T>) {
+    match result {
+        Err(StoreError::NotFound(_)) => {}
+        _rest => assert!(false, "Expected NotFound error, got: {:?}", _rest),
+    }
+}
+
+pub fn assert_unauthorized<T: std::fmt::Debug>(result: StoreResult<T>) {
+    match result {
+        Err(StoreError::PermissionDenied) => {}
+        _rest => assert!(false, "Expected PermissionDenied error, got: {:?}", _rest),
+    }
+}
 
 /// Test suite to setup and teardown test environment
 ///
@@ -25,16 +43,29 @@ impl BasicTestSuite {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let tmp = tempfile::tempdir()?;
         let path = tmp.path().to_path_buf();
-        println!("created temp dir: {}", tmp.path().display());
+        // println!("created temp dir: {}", tmp.path().display());
 
         let post_schemas = collection! {
+            "repo" => json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "status": { "type": "string" }
+                },
+                "required": ["name", "status"],
+                "x-unique": "name",
+            }),
             "post" => json!({
                 "type": "object",
                 "properties": {
                     "title": { "type": "string" },
-                    "author": { "type": "string" }
+                    "category": { "type": "string" },
+                    "content": { "type": "string" },
+                    "repo_id": { "type": "string" }
                 },
-                "required": ["title", "author"],
+                "required": ["title", "repo_id"],
+                "x-parent-id": { "parent": "repo", "field": "repo_id" },
             })
         };
         let namespace = "example_ns".to_string();
