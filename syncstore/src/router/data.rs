@@ -71,7 +71,6 @@ async fn list_data(
 }
 
 #[derive(Serialize, ToResponse, ToSchema)]
-#[serde(rename_all = "camelCase")]
 struct ListDataResponse {
     // todo might use summary info for list api
     items: Vec<DataItem>,
@@ -79,7 +78,6 @@ struct ListDataResponse {
 }
 
 #[derive(Deserialize, Serialize, ToResponse, ToSchema)]
-#[serde(rename_all = "camelCase")]
 struct PageInfo {
     count: usize,
     next_marker: Option<String>,
@@ -114,7 +112,7 @@ async fn get_data(
 /// Create a new data item
 #[endpoint(
     status_codes(201, 400, 401),
-    request_body(content = String, description = "Data item to create"),
+    request_body(content = serde_json::Value, description = "Data item to create"),
     responses(
         (status_code = 201, description = "Data created successfully", body = String),
         (status_code = 400, description = "Bad request"),
@@ -136,7 +134,7 @@ async fn create_data(
 /// Update an existing data item
 #[endpoint(
     status_codes(200, 400, 401, 404),
-    request_body(content = String, description = "Data item to update"),
+    request_body(content = serde_json::Value, description = "Data item to update"),
     responses(
         (status_code = 200, description = "Data updated successfully", body = String),
         (status_code = 400, description = "Bad request"),

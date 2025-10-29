@@ -10,14 +10,14 @@ use syncstore::{
 pub fn assert_not_found<T: std::fmt::Debug>(result: StoreResult<T>) {
     match result {
         Err(StoreError::NotFound(_)) => {}
-        _rest => assert!(false, "Expected NotFound error, got: {:?}", _rest),
+        _rest => panic!("Expected NotFound error, got: {:?}", _rest),
     }
 }
 
 pub fn assert_unauthorized<T: std::fmt::Debug>(result: StoreResult<T>) {
     match result {
         Err(StoreError::PermissionDenied) => {}
-        _rest => assert!(false, "Expected PermissionDenied error, got: {:?}", _rest),
+        _rest => panic!("Expected PermissionDenied error, got: {:?}", _rest),
     }
 }
 

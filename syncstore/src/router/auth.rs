@@ -111,7 +111,6 @@ async fn refresh(req: &mut Request, resp: &mut Response) -> ServiceResult<LoginR
 
 /// Request body for name-login
 #[derive(Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
 struct NameLoginRequest {
     #[salvo(schema(example = "user1"))]
     username: String,
@@ -121,7 +120,6 @@ struct NameLoginRequest {
 
 /// Response data for login
 #[derive(Serialize, ToResponse, ToSchema)]
-#[serde(rename_all = "camelCase")]
 struct LoginResponse {
     access_token: String,
     refresh_token: String,

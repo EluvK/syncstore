@@ -18,7 +18,6 @@ async fn register(body: JsonBody<RegisterRequest>, depot: &mut Depot, _resp: &mu
 
 /// Request body for user registration
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct RegisterRequest {
     username: String,
     password: String,

@@ -99,6 +99,7 @@ pub struct Permission {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, salvo::oapi::ToSchema, salvo::oapi::ToResponse)]
+#[serde(rename_all = "snake_case")]
 pub enum AccessLevel {
     Read,
     Edit,

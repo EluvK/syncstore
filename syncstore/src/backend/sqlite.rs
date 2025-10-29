@@ -116,80 +116,6 @@ mod checker {
             true
         }
     }
-
-    pub struct DBExists {
-        pub pool: Arc<Pool<SqliteConnectionManager>>,
-        pub collection: String,
-        pub column: String,
-    }
-
-    impl Keyword for DBExists {
-        fn validate<'i>(
-            &self,
-            instance: &'i serde_json::Value,
-            location: &jsonschema::paths::LazyLocation,
-        ) -> Result<(), jsonschema::ValidationError<'i>> {
-            let location: Location = (&location.clone()).into();
-            let Some(value) = instance.as_str() else {
-                return Err(jsonschema::ValidationError::custom(
-                    location.clone(),
-                    location.clone(),
-                    instance,
-                    "db_exists: expected string",
-                ));
-            };
-
-            let Ok(conn) = self.pool.get() else {
-                return Err(jsonschema::ValidationError::custom(
-                    location.clone(),
-                    location.clone(),
-                    instance,
-                    "db_exists: failed to get db connection",
-                ));
-            };
-
-            let sql = format!("SELECT 1 FROM {} WHERE {} = ?1 LIMIT 1", self.collection, self.column);
-            // println!("db_exists check sql: {}", sql);
-            let exists = conn
-                .query_row(&sql, params![value], |_| Ok(()))
-                .optional()
-                .map_err(|e| {
-                    jsonschema::ValidationError::custom(
-                        location.clone(),
-                        location.clone(),
-                        instance,
-                        format!("db_exists: db query error: {}", e),
-                    )
-                })?
-                .is_some();
-
-            if !exists {
-                return Err(jsonschema::ValidationError::custom(
-                    location.clone(),
-                    location,
-                    instance,
-                    format!(
-                        "db_exists: value '{}' not found in {}.{}",
-                        value, self.collection, self.column
-                    ),
-                ));
-            }
-
-            Ok(())
-        }
-
-        fn is_valid(&self, instance: &serde_json::Value) -> bool {
-            let sql = format!("SELECT 1 FROM {} WHERE {} = ?1 LIMIT 1", self.collection, self.column);
-            // println!("db_exists check sql: {}", sql);
-            if let Some(value) = instance.as_str()
-                && let Ok(conn) = self.pool.get()
-                && let Ok(Some(_)) = conn.query_row(&sql, params![value], |_| Ok(())).optional()
-            {
-                return true;
-            }
-            false
-        }
-    }
 }
 
 /// Builder to create a SqliteBackend with options.
@@ -252,8 +178,11 @@ pub struct SqliteBackend {
 }
 
 impl SqliteBackend {
-    pub(crate) fn parent_collection(&self, collection: &str) -> Option<&str> {
-        self.parent_ref.get(collection).map(|m| m.parent.as_str())
+    // return parent collection name and parent field name in current data item key
+    pub(crate) fn parent_collection(&self, collection: &str) -> Option<(&str, &str)> {
+        self.parent_ref
+            .get(collection)
+            .map(|m| (m.parent.as_str(), m.field.as_str()))
     }
 
     fn new(pool: Arc<Pool<SqliteConnectionManager>>) -> Self {
@@ -317,20 +246,7 @@ impl SqliteBackend {
         ?;
         // compile and cache the schema validator
         let pool = self.pool.clone();
-        fn db_exists_func<'a>(
-            _: &'a serde_json::Map<String, Value>,
-            value: &'a Value,
-            _: jsonschema::paths::Location,
-            pool: Arc<Pool<SqliteConnectionManager>>,
-        ) -> Result<Box<dyn jsonschema::Keyword>, jsonschema::ValidationError<'a>> {
-            let collection = value["collection"].as_str().unwrap_or("").to_string();
-            let column = value["column"].as_str().unwrap_or("").to_string();
-            Ok(Box::new(checker::DBExists {
-                pool: pool.clone(),
-                collection,
-                column,
-            }))
-        }
+
         fn x_parent_id_check<'a>(
             _parent: &'a serde_json::Map<String, Value>,
             value: &'a Value,
@@ -576,7 +492,7 @@ impl Backend for SqliteBackend {
                 body,
             })
         } else {
-            Err(StoreError::NotFound("Get Data".to_string()))
+            Err(StoreError::NotFound(format!("Get Data {} / {}", collection, id)))
         }
     }
 

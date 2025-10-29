@@ -74,7 +74,7 @@ impl Scribe for ServiceError {
 }
 
 impl EndpointOutRegister for ServiceError {
-    fn register(components: &mut salvo::oapi::Components, operation: &mut salvo::oapi::Operation) {}
+    fn register(_components: &mut salvo::oapi::Components, _operation: &mut salvo::oapi::Operation) {}
 }
 
 // for depot.get/obtain
@@ -82,7 +82,8 @@ impl From<Option<&Box<dyn Any + Send + Sync>>> for ServiceError {
     fn from(value: Option<&Box<dyn Any + Send + Sync>>) -> Self {
         ServiceError::InternalServerError(
             value
-                .and_then(|v| v.downcast_ref::<String>()).cloned()
+                .and_then(|v| v.downcast_ref::<String>())
+                .cloned()
                 .unwrap_or_else(|| "Unknown error".to_string()),
         )
     }

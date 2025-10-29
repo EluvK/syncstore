@@ -72,3 +72,33 @@ fn other_access_unauthorized() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn insert_and_list_child_data() -> Result<(), Box<dyn std::error::Error>> {
+    let s = BasicTestSuite::new()?;
+
+    let store = s.store.clone();
+    let namespace = &s.namespace;
+    let user = &s.user1_id;
+
+    let repo_doc = json!({ "name": "Repo for Posts", "description": "Repository to hold posts", "status": "active" });
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user)?.id;
+
+    let post_doc1 = json!({ "title": "First Post", "category": "general", "content": "This is the first post.", "repo_id": repo_id });
+    let post_doc2 = json!({ "title": "Second Post", "category": "general", "content": "This is the second post.", "repo_id": repo_id });
+
+    let post_id1 = store.insert(namespace, "post", &post_doc1, user)?.id;
+    let post_id2 = store.insert(namespace, "post", &post_doc2, user)?.id;
+
+    let (posts, _next_marker) = store.list(namespace, "post", &repo_id, None, 10, user)?;
+    assert_eq!(posts.len(), 2);
+    let post_ids: Vec<String> = posts.into_iter().map(|p| p.id).collect();
+    assert!(post_ids.contains(&post_id1));
+    assert!(post_ids.contains(&post_id2));
+
+    let user2 = &s.user2_id;
+    assert_unauthorized(store.get(namespace, "post", &post_id1, user2));
+    assert_unauthorized(store.list(namespace, "post", &repo_id, None, 10, user2));
+
+    Ok(())
+}
