@@ -79,7 +79,20 @@ impl Store {
         backend.insert(collection, body, meta)
     }
 
-    pub fn list(
+    pub fn list_by_owner(
+        &self,
+        namespace: &str,
+        collection: &str,
+        marker: Option<&str>,
+        limit: usize,
+        user: &str,
+    ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
+        // seems no need to check permission for listing by owner
+        let backend = self.data_manager.backend_for(namespace)?;
+        backend.list_by_owner(collection, user, marker, limit)
+    }
+
+    pub fn list_children(
         &self,
         namespace: &str,
         collection: &str,
@@ -88,8 +101,7 @@ impl Store {
         limit: usize,
         user: &str,
     ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
-        // ? need to figure out how to check the acl for list operation...
-        // list operation should have access for the parent collection.
+        // list children operation should have access for the parent collection.
         let backend = self.data_manager.backend_for(namespace)?;
         let Some((parent_collection, _field)) = backend.parent_collection(collection) else {
             return Err(StoreError::NotFound(format!(
@@ -102,7 +114,7 @@ impl Store {
         if !self.check_permission((namespace, parent_collection), &parent_data, user, &AccessLevel::Read)? {
             return Err(StoreError::PermissionDenied);
         }
-        backend.list(collection, parent_id, marker, limit)
+        backend.list_children(collection, parent_id, marker, limit)
     }
 
     pub fn get(&self, namespace: &str, collection: &str, id: &Id, user: &str) -> StoreResult<DataItem> {

@@ -1,6 +1,6 @@
-use serde_json::json;
-
 use crate::mock::*;
+use itertools::Itertools;
+use serde_json::json;
 
 #[test]
 fn owner_basic_crud() -> Result<(), Box<dyn std::error::Error>> {
@@ -90,7 +90,7 @@ fn insert_and_list_child_data() -> Result<(), Box<dyn std::error::Error>> {
     let post_id1 = store.insert(namespace, "post", &post_doc1, user)?.id;
     let post_id2 = store.insert(namespace, "post", &post_doc2, user)?.id;
 
-    let (posts, _next_marker) = store.list(namespace, "post", &repo_id, None, 10, user)?;
+    let (posts, _next_marker) = store.list_children(namespace, "post", &repo_id, None, 10, user)?;
     assert_eq!(posts.len(), 2);
     let post_ids: Vec<String> = posts.into_iter().map(|p| p.id).collect();
     assert!(post_ids.contains(&post_id1));
@@ -98,7 +98,42 @@ fn insert_and_list_child_data() -> Result<(), Box<dyn std::error::Error>> {
 
     let user2 = &s.user2_id;
     assert_unauthorized(store.get(namespace, "post", &post_id1, user2));
-    assert_unauthorized(store.list(namespace, "post", &repo_id, None, 10, user2));
+    assert_unauthorized(store.list_children(namespace, "post", &repo_id, None, 10, user2));
+
+    Ok(())
+}
+
+#[test]
+fn insert_and_list_owner_data() -> Result<(), Box<dyn std::error::Error>> {
+    let s = BasicTestSuite::new()?;
+
+    let store = s.store.clone();
+    let namespace = &s.namespace;
+    let user1 = &s.user1_id;
+
+    let repo_doc =
+        json!({ "name": "Repo for Owner Posts", "description": "Repository to hold owner posts", "status": "active" });
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
+
+    for _ in 0..10 {
+        let post_doc = json!({ "title": "Owner Post", "category": "general", "content": "This is an owner post.", "repo_id": repo_id });
+        store.insert(namespace, "post", &post_doc, user1)?;
+    }
+
+    let (posts_page1, next_marker1) = store.list_by_owner(namespace, "post", None, 5, user1)?;
+    assert_eq!(posts_page1.len(), 5);
+    assert!(next_marker1.is_some());
+    let (posts_page2, next_marker2) = store.list_by_owner(namespace, "post", next_marker1.as_deref(), 5, user1)?;
+    assert_eq!(posts_page2.len(), 5);
+    assert!(next_marker2.is_none());
+
+    assert!(
+        posts_page1
+            .into_iter()
+            .chain(posts_page2.into_iter())
+            .map(|p| p.id)
+            .all_unique()
+    );
 
     Ok(())
 }

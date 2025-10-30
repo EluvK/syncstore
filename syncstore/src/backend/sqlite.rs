@@ -416,7 +416,51 @@ impl Backend for SqliteBackend {
         Ok(meta)
     }
 
-    fn list(
+    fn list_by_owner(
+        &self,
+        collection: &str,
+        owner: &str,
+        marker: Option<&str>,
+        limit: usize,
+    ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
+        let conn = self.get_conn()?;
+        let table = sanitize_table_name(collection);
+        // use a single query: if marker is NULL the WHERE clause is ignored
+        let sql = format!(
+            "SELECT id, body, created_at, updated_at, owner, uniq, parent_id \
+             FROM {} \
+             WHERE (owner = ?1) AND (?2 IS NULL OR id >= ?2) \
+             ORDER BY id ASC \
+             LIMIT ?3",
+            table
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query(params![owner, marker, limit as i64 + 1])?;
+        let mut items = Vec::new();
+        let mut next_marker: Option<String> = None;
+        while let Some(row) = rows.next()? {
+            let id = row.get::<_, String>(0)?;
+            if items.len() == limit {
+                // we have one more item, set next_marker
+                next_marker = Some(id);
+                break;
+            }
+            items.push(DataItem {
+                id: id.clone(),
+                body: serde_json::from_str::<Value>(&row.get::<_, String>(1)?)?,
+                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)?
+                    .with_timezone(&chrono::Utc),
+                updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)?
+                    .with_timezone(&chrono::Utc),
+                owner: row.get(4)?,
+                unique: row.get(5)?,
+                parent_id: row.get(6)?,
+            });
+        }
+        Ok((items, next_marker))
+    }
+
+    fn list_children(
         &self,
         collection: &str,
         parent_id: &str,
@@ -429,18 +473,23 @@ impl Backend for SqliteBackend {
         let sql = format!(
             "SELECT id, body, created_at, updated_at, owner, uniq, parent_id \
              FROM {} \
-             WHERE (parent_id = ?1) AND (?2 IS NULL OR id > ?2) \
+             WHERE (parent_id = ?1) AND (?2 IS NULL OR id >= ?2) \
              ORDER BY id ASC \
              LIMIT ?3",
             table
         );
         tracing::info!("list sql: {}, {}", sql, limit);
         let mut stmt = conn.prepare(&sql)?;
-        let mut rows = stmt.query(params![parent_id, marker, limit as i64])?;
+        let mut rows = stmt.query(params![parent_id, marker, limit as i64 + 1])?;
         let mut items = Vec::new();
-        let mut last_id: Option<String> = None;
+        let mut next_marker: Option<String> = None;
         while let Some(row) = rows.next()? {
             let id = row.get::<_, String>(0)?;
+            if items.len() == limit {
+                // we have one more item, set next_marker
+                next_marker = Some(id);
+                break;
+            }
             items.push(DataItem {
                 id: id.clone(),
                 body: serde_json::from_str::<Value>(&row.get::<_, String>(1)?)?,
@@ -452,9 +501,7 @@ impl Backend for SqliteBackend {
                 unique: row.get(5)?,
                 parent_id: row.get(6)?,
             });
-            last_id = Some(id);
         }
-        let next_marker = if items.len() == limit { last_id } else { None };
         Ok((items, next_marker))
     }
 

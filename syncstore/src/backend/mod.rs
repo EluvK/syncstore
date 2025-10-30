@@ -7,8 +7,17 @@ pub trait Backend: Send + Sync {
     /// Insert a document (body) and associated meta. Returns the stored meta.
     fn insert(&self, collection: &str, body: &Value, meta: Meta) -> StoreResult<Meta>;
 
-    /// List documents in a collection with pagination.
-    fn list(
+    /// List documents in a collection under certain owner with pagination
+    fn list_by_owner(
+        &self,
+        collection: &str,
+        owner: &str,
+        marker: Option<&str>,
+        limit: usize,
+    ) -> StoreResult<(Vec<DataItem>, Option<String>)>;
+
+    /// List documents in a collection under certain parent's data with pagination
+    fn list_children(
         &self,
         collection: &str,
         parent_id: &str,

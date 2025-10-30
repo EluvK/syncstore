@@ -36,7 +36,7 @@ pub fn create_router() -> Router {
 async fn list_data(
     namespace: PathParam<String>,
     collection: PathParam<String>,
-    parent_id: QueryParam<String>,
+    parent_id: QueryParam<String, false>,
     marker: QueryParam<String, false>,
     limit: QueryParam<usize>,
     depot: &mut Depot,
@@ -53,14 +53,19 @@ async fn list_data(
         n if n > 1000 => 1000,
         n => n,
     };
-    let (items, next_marker) = depot.obtain::<Arc<Store>>()?.list(
-        namespace.as_str(),
-        collection.as_str(),
-        parent_id.as_str(),
-        marker.as_deref(),
-        limit,
-        user,
-    )?;
+    let store = depot.obtain::<Arc<Store>>()?;
+    let (items, next_marker) = if let Some(parent_id) = parent_id.as_deref() {
+        store.list_children(
+            namespace.as_str(),
+            collection.as_str(),
+            parent_id,
+            marker.as_deref(),
+            limit,
+            user,
+        )?
+    } else {
+        store.list_by_owner(namespace.as_str(), collection.as_str(), marker.as_deref(), limit, user)?
+    };
     Ok(ListDataResponse {
         page_info: PageInfo {
             count: items.len(),
