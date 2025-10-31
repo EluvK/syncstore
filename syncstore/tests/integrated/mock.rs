@@ -51,7 +51,7 @@ impl BasicTestSuite {
                 "properties": {
                     "name": { "type": "string" },
                     "description": { "type": "string" },
-                    "status": { "type": "string" }
+                    "status": { "type": "string", "enum": ["normal", "deleted"] }
                 },
                 "required": ["name", "status"],
                 "x-unique": "name",

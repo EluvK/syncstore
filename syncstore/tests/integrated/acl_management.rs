@@ -23,7 +23,7 @@ fn grant_acl_with_full_access() -> Result<(), Box<dyn std::error::Error>> {
     let user2 = &s.user2_id;
 
     // user1 insert new repo
-    let repo_doc = json!({ "name": "ACL Repo", "description": "Repository for ACL test", "status": "active" });
+    let repo_doc = json!({ "name": "ACL Repo", "description": "Repository for ACL test", "status": "normal" });
     let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
 
     // user2 cannot access the repo
@@ -73,7 +73,7 @@ fn grant_read_can_only_get() -> Result<(), Box<dyn std::error::Error>> {
 
     // user1 insert new repo
     let repo_doc =
-        json!({ "name": "ReadOnly Repo", "description": "Repository for read-only ACL test", "status": "active" });
+        json!({ "name": "ReadOnly Repo", "description": "Repository for read-only ACL test", "status": "normal" });
     let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
 
     // user1 grants user2 read access to the repo
@@ -116,7 +116,7 @@ fn grant_edit_can_read_and_update() -> Result<(), Box<dyn std::error::Error>> {
     let user2 = &s.user2_id;
 
     // user1 insert new repo
-    let repo_doc = json!({ "name": "Edit Repo", "description": "Repository for edit ACL test", "status": "active" });
+    let repo_doc = json!({ "name": "Edit Repo", "description": "Repository for edit ACL test", "status": "normal" });
     let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
 
     // user1 grants user2 edit access to the repo
@@ -161,7 +161,7 @@ fn grant_write_can_read_update_insert() -> Result<(), Box<dyn std::error::Error>
     let user2 = &s.user2_id;
 
     // user1 insert new repo
-    let repo_doc = json!({ "name": "Write Repo", "description": "Repository for write ACL test", "status": "active" });
+    let repo_doc = json!({ "name": "Write Repo", "description": "Repository for write ACL test", "status": "normal" });
     let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
 
     // user1 grants user2 write access to the repo

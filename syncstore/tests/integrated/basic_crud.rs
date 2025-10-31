@@ -12,7 +12,7 @@ fn owner_basic_crud() -> Result<(), Box<dyn std::error::Error>> {
     let user = &s.user1_id;
 
     // insert new data
-    let doc = json!({ "name": "Test Repo", "description": "A test repository", "status": "active" });
+    let doc = json!({ "name": "Test Repo", "description": "A test repository", "status": "normal" });
     let meta_insert = store.insert(namespace, "repo", &doc, user)?;
     let repo_id = meta_insert.id.clone();
 
@@ -57,7 +57,7 @@ fn other_access_unauthorized() -> Result<(), Box<dyn std::error::Error>> {
     let user2 = &s.user2_id;
 
     // insert new data by user1
-    let doc = json!({ "name": "User1 Repo", "description": "A test repository for user1", "status": "active" });
+    let doc = json!({ "name": "User1 Repo", "description": "A test repository for user1", "status": "normal" });
     let meta_insert = store.insert(namespace, "repo", &doc, user1)?;
     let repo_id = meta_insert.id.clone();
 
@@ -81,7 +81,7 @@ fn insert_and_list_child_data() -> Result<(), Box<dyn std::error::Error>> {
     let namespace = &s.namespace;
     let user = &s.user1_id;
 
-    let repo_doc = json!({ "name": "Repo for Posts", "description": "Repository to hold posts", "status": "active" });
+    let repo_doc = json!({ "name": "Repo for Posts", "description": "Repository to hold posts", "status": "normal" });
     let repo_id = store.insert(namespace, "repo", &repo_doc, user)?.id;
 
     let post_doc1 = json!({ "title": "First Post", "category": "general", "content": "This is the first post.", "repo_id": repo_id });
@@ -112,7 +112,7 @@ fn insert_and_list_owner_data() -> Result<(), Box<dyn std::error::Error>> {
     let user1 = &s.user1_id;
 
     let repo_doc =
-        json!({ "name": "Repo for Owner Posts", "description": "Repository to hold owner posts", "status": "active" });
+        json!({ "name": "Repo for Owner Posts", "description": "Repository to hold owner posts", "status": "normal" });
     let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
 
     for _ in 0..10 {
