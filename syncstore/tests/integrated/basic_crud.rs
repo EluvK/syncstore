@@ -137,3 +137,36 @@ fn insert_and_list_owner_data() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn validate_child_parent_data() -> Result<(), Box<dyn std::error::Error>> {
+    let s = BasicTestSuite::new()?;
+
+    let store = s.store.clone();
+    let namespace = &s.namespace;
+    let user = &s.user1_id;
+
+    let repo_doc = json!({ "name": "Repo for Validation", "description": "Repository to test parent-child validation", "status": "normal" });
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user)?.id;
+
+    // insert data will check permission on parent collection, so return 404 not found if parent id invalid, not even reach data schema validation
+    let invalid_post_doc = json!({ "title": "Invalid Post", "category": "general", "content": "This post has an invalid repo_id.", "repo_id": "non_existent_repo_id" });
+    assert_not_found(store.insert(namespace, "post", &invalid_post_doc, user));
+
+    let valid_post_doc = json!({ "title": "Valid Post", "category": "general", "content": "This post has a valid repo_id.", "repo_id": repo_id });
+    let post_id = store.insert(namespace, "post", &valid_post_doc, user)?.id;
+
+    // update data will check permission but the id already exists, so passed the permission check, but failed on data schema validation
+    let updated_post_doc = json!({ "title": "Updated Post", "category": "general", "content": "This post has an updated valid repo_id.", "repo_id": "non_existent_repo_id" });
+    assert_validation_error(store.update(namespace, "post", &post_id, &updated_post_doc, user));
+
+    let another_repo_doc = json!({ "name": "Another Repo", "description": "Another repository", "status": "normal" });
+    let another_repo_id = store.insert(namespace, "repo", &another_repo_doc, user)?.id;
+    // but you do can update to another valid parent id
+    let updated_post_doc_valid = json!({ "title": "Updated Post", "category": "general", "content": "This post has an updated valid repo_id.", "repo_id": another_repo_id });
+    let new_meta = store.update(namespace, "post", &post_id, &updated_post_doc_valid, user)?;
+    assert!(new_meta.updated_at > new_meta.created_at);
+    assert!(new_meta.id == post_id);
+
+    Ok(())
+}

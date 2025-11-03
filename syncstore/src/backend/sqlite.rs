@@ -103,17 +103,10 @@ mod checker {
                         Ok((body_text, owner))
                     })
                     .optional()
-            // && let Ok(body) = serde_json::from_str::<serde_json::Value>(&body_text)
-            // && let Some(field_value) = body.get(&m.field).and_then(|f| f.as_str())
             {
-                // if self.owner_match {
-                //     return self.owner == parent_owner;
-                // }
-                // return true;
-            } else {
-                return false;
+                return true;
             }
-            true
+            false
         }
     }
 }

@@ -14,6 +14,64 @@ fn gen_acl(data_id: &str, user: &str, access_level: AccessLevel) -> AccessContro
 }
 
 #[test]
+fn acl_basic_crud() -> Result<(), Box<dyn std::error::Error>> {
+    let s = BasicTestSuite::new()?;
+
+    let store = s.store.clone();
+    let namespace = &s.namespace;
+    let user1 = &s.user1_id;
+    let user2 = &s.user2_id;
+
+    // user1 insert new repo
+    let repo_doc =
+        json!({ "name": "ACL CRUD Repo", "description": "Repository for ACL CRUD test", "status": "normal" });
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
+
+    // user1 creates ACL for user2
+    let acl = gen_acl(&repo_id, user2, AccessLevel::Write);
+    store.create_acl((namespace, "repo"), acl.clone(), user1)?;
+
+    // user2 can update the repo with ACL
+    let item = store.get(namespace, "repo", &repo_id, user2)?;
+    assert_eq!(item.body["name"], "ACL CRUD Repo");
+    let mut updated = item.body.clone();
+    if let serde_json::Value::Object(ref mut map) = updated {
+        map.insert("description".to_string(), json!("Updated by user2 with ACL"));
+    }
+    store.update(namespace, "repo", &repo_id, &updated, user2)?;
+    let item = store.get(namespace, "repo", &repo_id, user2)?;
+    assert_eq!(item.body["description"], "Updated by user2 with ACL");
+
+    // user1 gets the ACL
+    let fetched_acl = store.get_acl((namespace, "repo"), &repo_id, user1)?;
+    assert_eq!(fetched_acl.data_id, repo_id);
+    assert_eq!(fetched_acl.permissions.len(), 1);
+    assert_eq!(fetched_acl.permissions[0].user, *user2);
+    assert_eq!(fetched_acl.permissions[0].access_level, AccessLevel::Write);
+
+    // user1 updates the ACL to give user2 only read access
+    let updated_acl = gen_acl(&repo_id, user2, AccessLevel::Read);
+    store.update_acl((namespace, "repo"), updated_acl.clone(), user1)?;
+
+    // user2 can still get the repo, but cannot update now
+    let item = store.get(namespace, "repo", &repo_id, user2)?;
+    assert_eq!(item.body["name"], "ACL CRUD Repo");
+    let mut updated = item.body.clone();
+    if let serde_json::Value::Object(ref mut map) = updated {
+        map.insert("description".to_string(), json!("Attempted update by user2 "));
+    }
+    assert_unauthorized(store.update(namespace, "repo", &repo_id, &updated, user2));
+
+    // user2 can not delete the ACL
+    assert_unauthorized(store.delete_acl((namespace, "repo"), &repo_id, user2));
+
+    // user1 deletes the ACL
+    store.delete_acl((namespace, "repo"), &repo_id, user1)?;
+
+    Ok(())
+}
+
+#[test]
 fn grant_acl_with_full_access() -> Result<(), Box<dyn std::error::Error>> {
     let s = BasicTestSuite::new()?;
 

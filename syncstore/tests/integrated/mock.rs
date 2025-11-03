@@ -21,6 +21,13 @@ pub fn assert_unauthorized<T: std::fmt::Debug>(result: StoreResult<T>) {
     }
 }
 
+pub fn assert_validation_error<T: std::fmt::Debug>(result: StoreResult<T>) {
+    match result {
+        Err(StoreError::Validation(_)) => {}
+        _rest => panic!("Expected ValidationError error, got: {:?}", _rest),
+    }
+}
+
 /// Test suite to setup and teardown test environment
 ///
 /// usage:
