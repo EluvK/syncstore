@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::backend::Backend;
 use crate::error::{StoreError, StoreResult};
-use crate::types::{DataItem, Id, Meta};
+use crate::types::{DataItem, DataItemDocument, Id, Meta};
 
 // ?let's write some user define schema checker here for now, late move to separate file module.
 mod checker {
@@ -263,19 +263,13 @@ impl SqliteBackend {
             }))
         }
 
-        let compiled = jsonschema::draft7::options()
-            // .with_keyword("db_exists", move |parent, value, path| {
-            //     db_exists_func(parent, value, path, pool.clone())
-            // })
-            .with_keyword("x-parent-id", move |parent, value, path| {
-                x_parent_id_check(parent, value, path, pool.clone())
-            });
+        let compiled = jsonschema::draft7::options().with_keyword("x-parent-id", move |parent, value, path| {
+            x_parent_id_check(parent, value, path, pool.clone())
+        });
         let compiled = compiled
             .build(schema)
             .map_err(|e| StoreError::Validation(format!("invalid schema: {}", e)))?;
 
-        // let compiled =
-        //     jsonschema::draft7::new(schema).map_err(|e| StoreError::Validation(format!("invalid schema: {}", e)))?;
         self.schema_validator.insert(collection.to_string(), compiled);
         // record the unique field if any
         if let Some(xu) = schema.get("x-unique").and_then(|v| v.as_str())
@@ -294,8 +288,6 @@ impl SqliteBackend {
         // ensure collection table exists
         let table = sanitize_table_name(collection);
 
-        // todo how to make `owner` db_exists to users.id?,
-        //?actually it might be unnecessary as owner should be checked by auth module before coming here.
         let sql = format!(
             "CREATE TABLE IF NOT EXISTS {} (
                 id TEXT PRIMARY KEY,
@@ -438,17 +430,18 @@ impl Backend for SqliteBackend {
                 next_marker = Some(id);
                 break;
             }
-            items.push(DataItem {
-                id: id.clone(),
-                body: serde_json::from_str::<Value>(&row.get::<_, String>(1)?)?,
-                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)?
-                    .with_timezone(&chrono::Utc),
-                updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)?
-                    .with_timezone(&chrono::Utc),
-                owner: row.get(4)?,
-                unique: row.get(5)?,
-                parent_id: row.get(6)?,
-            });
+            items.push(
+                DataItemDocument {
+                    id: id.clone(),
+                    body: row.get(1)?,
+                    created_at: row.get(2)?,
+                    updated_at: row.get(3)?,
+                    owner: row.get(4)?,
+                    unique: row.get(5)?,
+                    parent_id: row.get(6)?,
+                }
+                .try_into()?,
+            );
         }
         Ok((items, next_marker))
     }
@@ -483,17 +476,18 @@ impl Backend for SqliteBackend {
                 next_marker = Some(id);
                 break;
             }
-            items.push(DataItem {
-                id: id.clone(),
-                body: serde_json::from_str::<Value>(&row.get::<_, String>(1)?)?,
-                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)?
-                    .with_timezone(&chrono::Utc),
-                updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)?
-                    .with_timezone(&chrono::Utc),
-                owner: row.get(4)?,
-                unique: row.get(5)?,
-                parent_id: row.get(6)?,
-            });
+            items.push(
+                DataItemDocument {
+                    id: id.clone(),
+                    body: row.get(1)?,
+                    created_at: row.get(2)?,
+                    updated_at: row.get(3)?,
+                    owner: row.get(4)?,
+                    unique: row.get(5)?,
+                    parent_id: row.get(6)?,
+                }
+                .try_into()?,
+            );
         }
         Ok((items, next_marker))
     }
@@ -506,34 +500,21 @@ impl Backend for SqliteBackend {
             table
         );
         let mut stmt = conn.prepare(&sql)?;
-
-        let row = stmt
+        let data = stmt
             .query_row(params![id], |r| {
-                let body_text: String = r.get(0)?;
-                let created_at: String = r.get(1)?;
-                let updated_at: String = r.get(2)?;
-                let owner: String = r.get(3)?;
-                let unique: Option<String> = r.get(4)?;
-                let parent_id: Option<String> = r.get(5)?;
-                Ok((body_text, created_at, updated_at, owner, unique, parent_id))
+                Ok(DataItemDocument {
+                    id: id.to_string(),
+                    body: r.get(0)?,
+                    created_at: r.get(1)?,
+                    updated_at: r.get(2)?,
+                    owner: r.get(3)?,
+                    unique: r.get(4)?,
+                    parent_id: r.get(5)?,
+                })
             })
-            .optional()?;
-
-        if let Some((body_text, created_at, updated_at, owner, unique, parent_id)) = row {
-            let body: Value = serde_json::from_str(&body_text)?;
-
-            Ok(DataItem {
-                id: id.to_string(),
-                created_at: chrono::DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&chrono::Utc),
-                updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)?.with_timezone(&chrono::Utc),
-                owner,
-                unique,
-                parent_id,
-                body,
-            })
-        } else {
-            Err(StoreError::NotFound(format!("Get Data {} / {}", collection, id)))
-        }
+            .optional()?
+            .ok_or(StoreError::NotFound(format!("Get Data {} / {}", collection, id)))?;
+        data.try_into()
     }
 
     fn get_by_unique(&self, collection: &str, unique: &str) -> StoreResult<DataItem> {
@@ -550,38 +531,28 @@ impl Backend for SqliteBackend {
             table
         );
         let mut stmt = conn.prepare(&sql)?;
-        let row = stmt
+        let data = stmt
             .query_row(params![unique], |r| {
-                let id: String = r.get(0)?;
-                let body_text: String = r.get(1)?;
-                let created_at: String = r.get(2)?;
-                let updated_at: String = r.get(3)?;
-                let owner: String = r.get(4)?;
-                let parent_id: Option<String> = r.get(5)?;
-                Ok((id, body_text, created_at, updated_at, owner, parent_id))
+                Ok(DataItemDocument {
+                    id: r.get(0)?,
+                    body: r.get(1)?,
+                    created_at: r.get(2)?,
+                    updated_at: r.get(3)?,
+                    owner: r.get(4)?,
+                    unique: Some(unique.to_string()),
+                    parent_id: r.get(5)?,
+                })
             })
-            .optional()?;
-        if let Some((id, body_text, created_at, updated_at, owner, parent_id)) = row {
-            let body: Value = serde_json::from_str(&body_text)?;
-            Ok(DataItem {
-                id,
-                body,
-                created_at: chrono::DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&chrono::Utc),
-                updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)?.with_timezone(&chrono::Utc),
-                owner,
-                unique: Some(unique.to_string()),
-                parent_id,
-            })
-        } else {
-            Err(StoreError::NotFound("Get Data by Unique".to_string()))
-        }
+            .optional()?
+            .ok_or(StoreError::NotFound("Get Data by Unique".to_string()))?;
+        data.try_into()
     }
 
     fn update(&self, collection: &str, id: &Id, body: &Value) -> StoreResult<Meta> {
         // validate data, ensure collection table exists and schema validated
         self.validate_against_schema(collection, body)?;
         let body_text = serde_json::to_string(body)?;
-        let updated_at = chrono::Utc::now().to_rfc3339();
+        let updated_at = chrono::Utc::now();
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
         let unique = self.fetch_unique_field(collection, body)?;

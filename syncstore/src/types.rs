@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::error::StoreError;
+
 /// Identifier type used across the store.
 pub type Id = String;
 pub type Uid = String;
@@ -39,6 +41,36 @@ pub struct Meta {
     pub owner: Uid,
     pub unique: Option<String>,
     pub parent_id: Option<String>,
+}
+
+/// DataItemDocument
+/// diff with DataItem: the body is String
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DataItemDocument {
+    pub id: Id,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub owner: Uid,
+    pub unique: Option<String>,
+    pub parent_id: Option<String>,
+    pub body: String,
+}
+
+impl TryFrom<DataItemDocument> for DataItem {
+    type Error = StoreError;
+
+    fn try_from(value: DataItemDocument) -> std::result::Result<Self, Self::Error> {
+        let body: serde_json::Value = serde_json::from_str(&value.body)?;
+        Ok(Self {
+            id: value.id,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+            owner: value.owner,
+            unique: value.unique,
+            parent_id: value.parent_id,
+            body,
+        })
+    }
 }
 
 /// DataItem = Meta + Json Value Body, all flatten.
