@@ -19,8 +19,7 @@ async fn main() -> anyhow::Result<()> {
                 "description": { "type": "string" },
                 "status": { "type": "string", "enum": ["normal", "deleted"] }
             },
-            "required": ["name", "status"],
-            "x-unique": "name",
+            "required": ["name", "status"]
         }),
         // ✅ query posts in certain repo: list_by_parent(repo_id)
         "post" => json!({
@@ -32,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
                 "repo_id": { "type": "string" }
             },
             "required": ["title", "repo_id"],
-            "x-parent-id": { "parent": "repo", "field": "repo_id" },
+            "x-parent-id": { "parent": "repo", "field": "repo_id" }
         }),
         // ✅ query users' subscriptions: list_by_owner()
         // ✅ query subscribers of certain repo: list_by_parent(repo_id)
@@ -43,18 +42,18 @@ async fn main() -> anyhow::Result<()> {
                 "repo_id": { "type": "string" }
             },
             "required": ["user_id", "repo_id"],
-            "x-parent-id": { "parent": "repo", "field": "repo_id" },
+            "x-parent-id": { "parent": "repo", "field": "repo_id" }
         }),
         // ✅ query comments of certain post: list_by_parent(post_id)
         "comment" => json!({
             "type": "object",
             "properties": {
-                "author": { "type": "string" },
                 "content": { "type": "string" },
-                "post_id": { "type": "string" }
+                "post_id": { "type": "string" },
+                "parent_id": { "type": "string" }
             },
-            "required": ["author", "content", "post_id"],
-            "x-parent-id": { "parent": "post", "field": "post_id" },
+            "required": ["content", "post_id"],
+            "x-parent-id": { "parent": "post", "field": "post_id" }
         }),
     };
     let store = Store::build("./db_test", vec![("xbb", xbb_schema)])?;

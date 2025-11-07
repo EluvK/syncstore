@@ -1,0 +1,77 @@
+[general]
+target_db_path = "./whatever"
+namespace = "xbb"
+
+[user_mapping]
+source_table = "user"
+
+[[data_mappings]]
+source_table = "repo"
+target_collection = "repo"
+target_schema = """
+{
+    "type": "object",
+    "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["normal", "deleted"] }
+    },
+    "required": ["name", "status"]
+}
+"""
+owner_field = "owner"
+data_fields = ["name", "description", "status"]
+
+[[data_mappings]]
+source_table = "post"
+target_collection = "post"
+target_schema = """
+{
+    "type": "object",
+    "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "content": { "type": "string" },
+        "repo_id": { "type": "string" }
+    },
+    "required": ["title", "repo_id"],
+    "x-parent-id": { "parent": "repo", "field": "repo_id" }
+}
+"""
+owner_field = "author"
+data_fields = ["title", "category", "content", "repo_id"]
+
+[[data_mappings]]
+source_table = "subscribe"
+target_collection = "subscribe"
+target_schema = """
+{
+    "type": "object",
+    "properties": {
+        "user_id": { "type": "string" },
+        "repo_id": { "type": "string" }
+    },
+    "required": ["user_id", "repo_id"],
+    "x-parent-id": { "parent": "repo", "field": "repo_id" }
+}
+"""
+owner_field = "user_id" # here should be repo owner, but the source table has no such field, should alter this data later manually
+data_fields = ["user_id", "repo_id"]
+
+[[data_mappings]]
+source_table = "comment"
+target_collection = "comment"
+target_schema = """
+{
+    "type": "object",
+    "properties": {
+        "content": { "type": "string" },
+        "post_id": { "type": "string" },
+        "parent_id": { "type": "string" }
+    },
+    "required": ["content", "post_id"],
+    "x-parent-id": { "parent": "post", "field": "post_id" }
+}
+"""
+owner_field = "author"
+data_fields = ["content", "post_id", "parent_id"]

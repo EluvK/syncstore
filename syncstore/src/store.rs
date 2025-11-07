@@ -53,6 +53,10 @@ impl Store {
     pub fn create_user(&self, username: &str, password: &str) -> StoreResult<()> {
         self.user_manager.create_user(username, password)
     }
+
+    pub fn get_user_backend(&self) -> Arc<dyn Backend> {
+        self.user_manager.get_inner_backend()
+    }
 }
 
 /// Data operations, CRUD using data manager, re-expose here for convenience
@@ -180,6 +184,10 @@ impl Store {
             return self.check_permission((namespace, parent_collection), &parent_data, user, access_level);
         }
         Ok(false)
+    }
+
+    pub fn get_data_backend(&self, namespace: &str) -> StoreResult<Arc<crate::backend::SqliteBackend>> {
+        self.data_manager.backend_for(namespace)
     }
 }
 
