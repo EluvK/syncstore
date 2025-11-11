@@ -130,23 +130,41 @@ pub struct Permission {
     pub access_level: AccessLevel,
 }
 
+// you might want to update the `AclManager::new(), schema enums as well when modifying this.`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, salvo::oapi::ToSchema, salvo::oapi::ToResponse)]
 #[serde(rename_all = "snake_case")]
 pub enum AccessLevel {
+    /// Can only read existing data.
     Read,
-    Edit,
+    /// Can only update existing data, cannot create new data at all.
+    Update,
+    /// Can read and create new data as sibling, but cannot update existing data.
+    Create,
+    /// Can read, create new data and update existing data. Cannot delete.
     Write,
+    /// Can do all operations, including delete.
     FullAccess,
 }
 
-impl AccessLevel {
-    pub fn contains(&self, other: &AccessLevel) -> bool {
-        match (self, other) {
-            (AccessLevel::FullAccess, _)
-            | (AccessLevel::Write, AccessLevel::Write | AccessLevel::Read | AccessLevel::Edit)
-            | (AccessLevel::Edit, AccessLevel::Edit | AccessLevel::Read)
-            | (AccessLevel::Read, AccessLevel::Read) => true,
-            _ => false,
+bitflags::bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct ACLMask: u8 {
+        const READ_ONLY   = 0b00001;
+        const UPDATE_ONLY = 0b00010;
+        const CREATE_ONLY = 0b00100;
+        const DELETE      = 0b01000;
+        const FULL_ACCESS = 0b01111;
+    }
+}
+
+impl From<AccessLevel> for ACLMask {
+    fn from(level: AccessLevel) -> Self {
+        match level {
+            AccessLevel::Read => ACLMask::READ_ONLY,
+            AccessLevel::Update => ACLMask::READ_ONLY | ACLMask::UPDATE_ONLY,
+            AccessLevel::Create => ACLMask::READ_ONLY | ACLMask::CREATE_ONLY,
+            AccessLevel::Write => ACLMask::READ_ONLY | ACLMask::UPDATE_ONLY | ACLMask::CREATE_ONLY,
+            AccessLevel::FullAccess => ACLMask::FULL_ACCESS,
         }
     }
 }

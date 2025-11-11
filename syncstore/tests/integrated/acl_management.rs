@@ -165,7 +165,7 @@ fn grant_read_can_only_get() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn grant_edit_can_read_and_update() -> Result<(), Box<dyn std::error::Error>> {
+fn grant_update_can_read_and_update() -> Result<(), Box<dyn std::error::Error>> {
     let s = BasicTestSuite::new()?;
 
     let store = s.store.clone();
@@ -174,25 +174,26 @@ fn grant_edit_can_read_and_update() -> Result<(), Box<dyn std::error::Error>> {
     let user2 = &s.user2_id;
 
     // user1 insert new repo
-    let repo_doc = json!({ "name": "Edit Repo", "description": "Repository for edit ACL test", "status": "normal" });
+    let repo_doc =
+        json!({ "name": "Update Repo", "description": "Repository for update ACL test", "status": "normal" });
     let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
 
-    // user1 grants user2 edit access to the repo
-    let acl = gen_acl(&repo_id, user2, AccessLevel::Edit);
+    // user1 grants user2 update access to the repo
+    let acl = gen_acl(&repo_id, user2, AccessLevel::Update);
     store.create_acl((namespace, "repo"), acl, user1)?;
 
     // user2 can access the repo
     let item = store.get(namespace, "repo", &repo_id, user2)?;
-    assert_eq!(item.body["name"], "Edit Repo");
+    assert_eq!(item.body["name"], "Update Repo");
 
     // user2 can update the repo
     let mut updated = item.body.clone();
     if let serde_json::Value::Object(ref mut map) = updated {
-        map.insert("description".to_string(), json!("Updated by user2 with edit access"));
+        map.insert("description".to_string(), json!("Updated by user2 with update access"));
     }
     store.update(namespace, "repo", &repo_id, &updated, user2)?;
     let item = store.get(namespace, "repo", &repo_id, user2)?;
-    assert_eq!(item.body["description"], "Updated by user2 with edit access");
+    assert_eq!(item.body["description"], "Updated by user2 with update access");
 
     // user2 cannot insert child data (post) under the repo
     let post_doc =
@@ -205,6 +206,59 @@ fn grant_edit_can_read_and_update() -> Result<(), Box<dyn std::error::Error>> {
     // owner user1 can still delete the repo
     store.delete(namespace, "repo", &repo_id, user1)?;
     assert_not_found(store.get(namespace, "repo", &repo_id, user1));
+
+    Ok(())
+}
+
+#[test]
+fn grant_create_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> {
+    let s = BasicTestSuite::new()?;
+
+    let store = s.store.clone();
+    let namespace = &s.namespace;
+    let user1 = &s.user1_id;
+    let user2 = &s.user2_id;
+
+    // user1 insert new repo
+    let repo_doc =
+        json!({ "name": "Create Repo", "description": "Repository for create ACL test", "status": "normal" });
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
+
+    // user1 grants user2 create access to the repo
+    let acl = gen_acl(&repo_id, user2, AccessLevel::Create);
+    store.create_acl((namespace, "repo"), acl, user1)?;
+
+    // user1 put a post under the repo to test parent permission check
+    let post_doc = json!({ "title": "Initial Post", "category": "test", "content": "This is the initial post.", "repo_id": repo_id });
+    let post_id = store.insert(namespace, "post", &post_doc, user1)?.id;
+
+    // user2 can access the repo
+    let item = store.get(namespace, "repo", &repo_id, user2)?;
+    assert_eq!(item.body["name"], "Create Repo");
+
+    // user2 cannot update the repo or post in the repo
+    let mut updated = item.body.clone();
+    if let serde_json::Value::Object(ref mut map) = updated {
+        map.insert("description".to_string(), json!("Attempted update by user2"));
+    }
+    assert_unauthorized(store.update(namespace, "repo", &repo_id, &updated, user2));
+    // try to update the post
+    let post_item = store.get(namespace, "post", &post_id, user1)?;
+    let mut post_updated = post_item.body.clone();
+    if let serde_json::Value::Object(ref mut map) = post_updated {
+        map.insert("content".to_string(), json!("Attempted update of post by user2"));
+    }
+    assert_unauthorized(store.update(namespace, "post", &post_id, &post_updated, user2));
+
+    // user2 can add child data (post) under the repo
+    let new_post_doc =
+        json!({ "title": "Post by user2", "category": "test", "content": "This is a test post.", "repo_id": repo_id });
+    let new_post_id = store.insert(namespace, "post", &new_post_doc, user2)?.id;
+    let new_post_item = store.get(namespace, "post", &new_post_id, user2)?;
+    assert_eq!(new_post_item.body["title"], "Post by user2");
+
+    // user2 cannot delete the repo
+    assert_unauthorized(store.delete(namespace, "repo", &repo_id, user2));
 
     Ok(())
 }

@@ -34,7 +34,7 @@ impl AclManager {
                             },
                             "access_level": {
                                 "type": "string",
-                                "enum": ["read", "edit", "write", "full_access"]
+                                "enum": ["read", "update", "create", "write", "full_access"]
                             }
                         }
                     }

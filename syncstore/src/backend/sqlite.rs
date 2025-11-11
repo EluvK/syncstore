@@ -245,7 +245,7 @@ impl SqliteBackend {
             value: &'a Value,
             _path: jsonschema::paths::Location,
             pool: Arc<Pool<SqliteConnectionManager>>,
-        ) -> Result<Box<dyn jsonschema::Keyword>, jsonschema::ValidationError<'a>> {
+        ) -> Result<Box<dyn jsonschema::Keyword>, Box<jsonschema::ValidationError<'a>>> {
             tracing::info!("more: value: {value:?}");
             tracing::info!("more: _parent: {:?}", _parent);
             let meta = serde_json::from_value(value.clone()).map_err(|e| {
@@ -264,7 +264,7 @@ impl SqliteBackend {
         }
 
         let compiled = jsonschema::draft7::options().with_keyword("x-parent-id", move |parent, value, path| {
-            x_parent_id_check(parent, value, path, pool.clone())
+            x_parent_id_check(parent, value, path, pool.clone()).map_err(|e| *e)
         });
         let compiled = compiled
             .build(schema)

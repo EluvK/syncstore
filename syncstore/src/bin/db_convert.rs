@@ -1,12 +1,11 @@
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags};
-use salvo::serde::MapDeserializer;
 use serde::Deserialize;
 use serde_json::json;
 use syncstore::{
     backend::Backend,
-    components::{DataManagerBuilder, DataSchemasBuilder},
+    components::DataSchemasBuilder,
     error::StoreError,
     types::Meta,
     utils::constant::{ROOT_OWNER, USER_TABLE},
@@ -40,13 +39,13 @@ fn main() -> anyhow::Result<()> {
         let table = table?;
         println!("\nProcessing table: {}", table);
 
-        let mut sel = conn.prepare(&format!("SELECT * FROM {}", table))?;
+        let sel = conn.prepare(&format!("SELECT * FROM {}", table))?;
         let col_names = sel
             .column_names()
             .into_iter()
             .map(ToString::to_string)
             .collect::<Vec<_>>();
-        let mut rows = sel.query([])?;
+        // let mut rows = sel.query([])?;
         println!("Found columns: {:?}", col_names);
     }
 
@@ -173,6 +172,7 @@ fn main() -> anyhow::Result<()> {
                 created_at,
                 updated_at,
                 owner,
+                // it's ok to be None that the insert will make up this fields if exists.
                 unique: None,
                 parent_id: None,
             };

@@ -5,7 +5,7 @@ use serde_json::Value;
 use crate::backend::Backend;
 use crate::components::{AclManager, DataManager, DataManagerBuilder, DataSchemas, UserManager};
 use crate::error::{StoreError, StoreResult};
-use crate::types::{AccessControl, AccessLevel, DataItem, Id, Meta};
+use crate::types::{ACLMask, AccessControl, DataItem, Id, Meta};
 
 pub struct Store {
     data_manager: Arc<DataManager>,
@@ -75,7 +75,7 @@ impl Store {
                 )));
             };
             let parent_data = backend.get(parent_collection, &parent_id.to_string())?;
-            if !self.check_permission((namespace, parent_collection), &parent_data, user, &AccessLevel::Write)? {
+            if !self.check_permission((namespace, parent_collection), &parent_data, user, ACLMask::CREATE_ONLY)? {
                 return Err(StoreError::PermissionDenied);
             }
         }
@@ -115,7 +115,7 @@ impl Store {
         };
         let parent_data = backend.get(parent_collection, &parent_id.to_string())?;
         // check permission on parent data
-        if !self.check_permission((namespace, parent_collection), &parent_data, user, &AccessLevel::Read)? {
+        if !self.check_permission((namespace, parent_collection), &parent_data, user, ACLMask::READ_ONLY)? {
             return Err(StoreError::PermissionDenied);
         }
         backend.list_children(collection, parent_id, marker, limit)
@@ -125,7 +125,7 @@ impl Store {
         let backend = self.data_manager.backend_for(namespace)?;
         let data = backend.get(collection, id)?;
         // check permission
-        if !self.check_permission((namespace, collection), &data, user, &AccessLevel::Read)? {
+        if !self.check_permission((namespace, collection), &data, user, ACLMask::READ_ONLY)? {
             return Err(StoreError::PermissionDenied);
         }
         Ok(data)
@@ -135,7 +135,7 @@ impl Store {
         let backend = self.data_manager.backend_for(namespace)?;
         let data = backend.get(collection, id)?;
         // check permission
-        if !self.check_permission((namespace, collection), &data, user, &AccessLevel::Edit)? {
+        if !self.check_permission((namespace, collection), &data, user, ACLMask::UPDATE_ONLY)? {
             return Err(StoreError::PermissionDenied);
         }
         backend.update(collection, id, body)
@@ -147,7 +147,7 @@ impl Store {
         let backend = self.data_manager.backend_for(namespace)?;
         let data = backend.get(collection, id)?;
         // check permission
-        if !self.check_permission((namespace, collection), &data, user, &AccessLevel::FullAccess)? {
+        if !self.check_permission((namespace, collection), &data, user, ACLMask::DELETE)? {
             return Err(StoreError::PermissionDenied);
         }
         backend.delete(collection, id)
@@ -161,7 +161,7 @@ impl Store {
         (namespace, collection): (&str, &str),
         data: &DataItem,
         user: &str,
-        access_level: &AccessLevel,
+        needed_mask: ACLMask,
     ) -> StoreResult<bool> {
         // check owner
         if data.owner == user {
@@ -170,7 +170,8 @@ impl Store {
         // check ACL
         if let Ok(acl) = self.acl_manager.get_acl(&data.id) {
             for perm in acl.permissions {
-                if perm.user == user && perm.access_level.contains(access_level) {
+                let acl_mask: ACLMask = perm.access_level.clone().into();
+                if perm.user == user && acl_mask.contains(needed_mask) {
                     return Ok(true);
                 }
             }
@@ -181,7 +182,7 @@ impl Store {
             && let Some((parent_collection, _field)) = backend.parent_collection(collection)
         {
             let parent_data = backend.get(parent_collection, parent_id)?;
-            return self.check_permission((namespace, parent_collection), &parent_data, user, access_level);
+            return self.check_permission((namespace, parent_collection), &parent_data, user, needed_mask);
         }
         Ok(false)
     }
