@@ -7,3 +7,6 @@ admin_address = "127.0.0.1:1012"
 address = "127.0.0.1:1011"
 jwt.access_secret = "your_access_secret"
 jwt.refresh_secret = "your_refresh_secret"
+
+[store_config]
+directory = "./db_test"

@@ -56,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
             "x-parent-id": { "parent": "post", "field": "post_id" }
         }),
     };
-    let store = Store::build("./db_test", vec![("xbb", xbb_schema)])?;
+    let store = Store::build(&config.store_config.directory, vec![("xbb", xbb_schema)])?;
     syncstore::init_service(store, &config.service_config).await?;
     Ok(())
 }

@@ -1,11 +1,12 @@
 use serde::Deserialize;
 use ss_utils::logs::LogConfig;
-use syncstore::config::ServiceConfig;
+use syncstore::config::{ServiceConfig, StoreConfig};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub log_config: LogConfig,
     pub service_config: ServiceConfig,
+    pub store_config: StoreConfig,
 }
 
 impl Config {

@@ -12,3 +12,8 @@ pub struct Jwt {
     pub access_secret: String,
     pub refresh_secret: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct StoreConfig {
+    pub directory: String,
+}
