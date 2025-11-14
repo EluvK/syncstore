@@ -11,9 +11,6 @@ pub struct UserManager {
     backend: Arc<SqliteBackend>,
 }
 
-// todo need to add a jwt auth for user management
-// ? real hate to build more wheels, late to do this, after adding route for all db modules.
-// ? for now a quick simple name password check.
 impl UserManager {
     pub fn new(base_dir: impl AsRef<Path>) -> StoreResult<Self> {
         let mut path = base_dir.as_ref().to_path_buf();
@@ -43,7 +40,6 @@ impl UserManager {
             "username": username,
             "password": password
         });
-        // todo lots of works here...
         let meta = Meta::new(ROOT_OWNER.to_string(), Some(username.to_string()));
         self.backend.insert(USER_TABLE, &user, meta)?;
         Ok(())

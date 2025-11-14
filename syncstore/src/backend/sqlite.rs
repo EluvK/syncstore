@@ -136,8 +136,6 @@ impl SqliteBackendBuilder {
     }
 
     pub fn with_collection_schema(mut self, collection: &str, schema: Value) -> Self {
-        // todo should we check the schema is valid json schema? then the return type should be Result<Self, Error>
-        // but we might need to crash as it is static config error then.? TBD
         self.collection_schemas.push((collection.to_string(), schema));
         self
     }
