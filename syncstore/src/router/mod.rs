@@ -2,6 +2,7 @@ mod acl;
 mod admin;
 mod auth;
 mod data;
+mod health;
 mod user;
 
 use std::sync::Arc;
@@ -29,7 +30,9 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
             ])
             .force_passed(true);
 
-    let non_auth_router = Router::new().push(Router::with_path("auth").push(auth::create_non_auth_router()));
+    let non_auth_router = Router::new()
+        .push(Router::with_path("auth").push(auth::create_non_auth_router()))
+        .push(health::create_router());
     let auth_router = Router::new()
         .hoop(auth_handler)
         .hoop(jwt_to_user)

@@ -13,7 +13,7 @@ anyhow = "1.0.100"
 async-trait = "0.1.89"
 chrono = { version = "0.4.42", features = ["serde"] }
 itertools = "0.14.0"
-jsonschema = "0.33.0"
+jsonschema = "0.35.0"
 r2d2 = "0.8.10"
 r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
 rusqlite = { version = "0.37.0", features = ["bundled", "chrono"] }
