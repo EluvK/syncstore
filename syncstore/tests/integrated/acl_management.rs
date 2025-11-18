@@ -60,10 +60,10 @@ fn acl_basic_crud() -> Result<(), Box<dyn std::error::Error>> {
     if let serde_json::Value::Object(ref mut map) = updated {
         map.insert("description".to_string(), json!("Attempted update by user2 "));
     }
-    assert_unauthorized(store.update(namespace, "repo", &repo_id, &updated, user2));
+    assert_permission_denied(store.update(namespace, "repo", &repo_id, &updated, user2));
 
     // user2 can not delete the ACL
-    assert_unauthorized(store.delete_acl((namespace, "repo"), &repo_id, user2));
+    assert_permission_denied(store.delete_acl((namespace, "repo"), &repo_id, user2));
 
     // user1 deletes the ACL
     store.delete_acl((namespace, "repo"), &repo_id, user1)?;
@@ -85,12 +85,12 @@ fn grant_acl_with_full_access() -> Result<(), Box<dyn std::error::Error>> {
     let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
 
     // user2 cannot access the repo
-    assert_unauthorized(store.get(namespace, "repo", &repo_id, user2));
+    assert_permission_denied(store.get(namespace, "repo", &repo_id, user2));
 
     // user1 grants user2 full access to the repo
     let acl = gen_acl(&repo_id, user2, AccessLevel::FullAccess);
     // only owner can create ACL
-    assert_unauthorized(store.create_acl((namespace, "repo"), acl.clone(), user2));
+    assert_permission_denied(store.create_acl((namespace, "repo"), acl.clone(), user2));
     store.create_acl((namespace, "repo"), acl, user1)?;
 
     // user2 can now access the repo
@@ -147,15 +147,15 @@ fn grant_read_can_only_get() -> Result<(), Box<dyn std::error::Error>> {
     if let serde_json::Value::Object(ref mut map) = updated {
         map.insert("description".to_string(), json!("Attempted update by user2"));
     }
-    assert_unauthorized(store.update(namespace, "repo", &repo_id, &updated, user2));
+    assert_permission_denied(store.update(namespace, "repo", &repo_id, &updated, user2));
 
     // user2 cannot insert child data (post) under the repo
     let post_doc =
         json!({ "title": "Post by user2", "category": "test", "content": "This is a test post.", "repo_id": repo_id });
-    assert_unauthorized(store.insert(namespace, "post", &post_doc, user2));
+    assert_permission_denied(store.insert(namespace, "post", &post_doc, user2));
 
     // user2 cannot delete the repo
-    assert_unauthorized(store.delete(namespace, "repo", &repo_id, user2));
+    assert_permission_denied(store.delete(namespace, "repo", &repo_id, user2));
 
     // owner user1 can still delete the repo
     store.delete(namespace, "repo", &repo_id, user1)?;
@@ -198,10 +198,10 @@ fn grant_update_can_read_and_update() -> Result<(), Box<dyn std::error::Error>> 
     // user2 cannot insert child data (post) under the repo
     let post_doc =
         json!({ "title": "Post by user2", "category": "test", "content": "This is a test post.", "repo_id": repo_id });
-    assert_unauthorized(store.insert(namespace, "post", &post_doc, user2));
+    assert_permission_denied(store.insert(namespace, "post", &post_doc, user2));
 
     // user2 cannot delete the repo
-    assert_unauthorized(store.delete(namespace, "repo", &repo_id, user2));
+    assert_permission_denied(store.delete(namespace, "repo", &repo_id, user2));
 
     // owner user1 can still delete the repo
     store.delete(namespace, "repo", &repo_id, user1)?;
@@ -241,14 +241,14 @@ fn grant_create_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> 
     if let serde_json::Value::Object(ref mut map) = updated {
         map.insert("description".to_string(), json!("Attempted update by user2"));
     }
-    assert_unauthorized(store.update(namespace, "repo", &repo_id, &updated, user2));
+    assert_permission_denied(store.update(namespace, "repo", &repo_id, &updated, user2));
     // try to update the post
     let post_item = store.get(namespace, "post", &post_id, user1)?;
     let mut post_updated = post_item.body.clone();
     if let serde_json::Value::Object(ref mut map) = post_updated {
         map.insert("content".to_string(), json!("Attempted update of post by user2"));
     }
-    assert_unauthorized(store.update(namespace, "post", &post_id, &post_updated, user2));
+    assert_permission_denied(store.update(namespace, "post", &post_id, &post_updated, user2));
 
     // user2 can add child data (post) under the repo
     let new_post_doc =
@@ -258,7 +258,7 @@ fn grant_create_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> 
     assert_eq!(new_post_item.body["title"], "Post by user2");
 
     // user2 cannot delete the repo
-    assert_unauthorized(store.delete(namespace, "repo", &repo_id, user2));
+    assert_permission_denied(store.delete(namespace, "repo", &repo_id, user2));
 
     Ok(())
 }
@@ -301,7 +301,7 @@ fn grant_write_can_read_update_insert() -> Result<(), Box<dyn std::error::Error>
     assert_eq!(post_item.body["title"], "Post by user2");
 
     // user2 cannot delete the repo
-    assert_unauthorized(store.delete(namespace, "repo", &repo_id, user2));
+    assert_permission_denied(store.delete(namespace, "repo", &repo_id, user2));
 
     // owner user1 can still delete the repo
     store.delete(namespace, "repo", &repo_id, user1)?;

@@ -27,10 +27,10 @@ pub fn create_router() -> Router {
 
 /// List data items with pagination
 #[endpoint(
-    status_codes(200, 401),
+    status_codes(200, 403),
     responses(
         (status_code = 200, description = "List data successfully", body = ListDataResponse),
-        (status_code = 401, description = "Unauthorized")
+        (status_code = 403, description = "FORBIDDEN")
     )
 )]
 async fn list_data(
@@ -96,10 +96,10 @@ impl Scribe for ListDataResponse {
 
 /// Get a single data item by ID
 #[endpoint(
-    status_codes(200, 401, 404),
+    status_codes(200, 403, 404),
     responses(
         (status_code = 200, description = "Get data successfully", body = DataItem),
-        (status_code = 401, description = "Unauthorized"),
+        (status_code = 403, description = "FORBIDDEN"),
         (status_code = 404, description = "Data not found")
     )
 )]
@@ -116,12 +116,12 @@ async fn get_data(
 
 /// Create a new data item
 #[endpoint(
-    status_codes(201, 400, 401),
+    status_codes(201, 400, 403),
     request_body(content = serde_json::Value, description = "Data item to create"),
     responses(
         (status_code = 201, description = "Data created successfully", body = String),
         (status_code = 400, description = "Bad request"),
-        (status_code = 401, description = "Unauthorized")
+        (status_code = 403, description = "FORBIDDEN")
     )
 )]
 async fn create_data(
@@ -138,12 +138,12 @@ async fn create_data(
 
 /// Update an existing data item
 #[endpoint(
-    status_codes(200, 400, 401, 404),
+    status_codes(200, 400, 403, 404),
     request_body(content = serde_json::Value, description = "Data item to update"),
     responses(
         (status_code = 200, description = "Data updated successfully", body = String),
         (status_code = 400, description = "Bad request"),
-        (status_code = 401, description = "Unauthorized"),
+        (status_code = 403, description = "FORBIDDEN"),
         (status_code = 404, description = "Data not found")
     )
 )]
@@ -162,10 +162,10 @@ async fn update_data(
 
 /// Delete a data item
 #[endpoint(
-    status_codes(204, 401, 404),
+    status_codes(204, 403, 404),
     responses(
         (status_code = 204, description = "Data deleted successfully"),
-        (status_code = 401, description = "Unauthorized"),
+        (status_code = 403, description = "FORBIDDEN"),
         (status_code = 404, description = "Data not found")
     )
 )]

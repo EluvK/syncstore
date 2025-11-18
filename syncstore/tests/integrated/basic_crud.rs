@@ -62,13 +62,13 @@ fn other_access_unauthorized() -> Result<(), Box<dyn std::error::Error>> {
     let repo_id = meta_insert.id.clone();
 
     // user2 tries to get the data
-    assert_unauthorized(store.get(namespace, "repo", &repo_id, user2));
+    assert_permission_denied(store.get(namespace, "repo", &repo_id, user2));
 
     // user2 tries to update the data
-    assert_unauthorized(store.update(namespace, "repo", &repo_id, &doc, user2));
+    assert_permission_denied(store.update(namespace, "repo", &repo_id, &doc, user2));
 
     // user2 tries to delete the data
-    assert_unauthorized(store.delete(namespace, "repo", &repo_id, user2));
+    assert_permission_denied(store.delete(namespace, "repo", &repo_id, user2));
 
     Ok(())
 }
@@ -97,8 +97,8 @@ fn insert_and_list_child_data() -> Result<(), Box<dyn std::error::Error>> {
     assert!(post_ids.contains(&post_id2));
 
     let user2 = &s.user2_id;
-    assert_unauthorized(store.get(namespace, "post", &post_id1, user2));
-    assert_unauthorized(store.list_children(namespace, "post", &repo_id, None, 10, user2));
+    assert_permission_denied(store.get(namespace, "post", &post_id1, user2));
+    assert_permission_denied(store.list_children(namespace, "post", &repo_id, None, 10, user2));
 
     Ok(())
 }

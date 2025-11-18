@@ -28,12 +28,12 @@ pub fn create_router() -> Router {
 
 /// Create a new ACL for specified resources
 #[endpoint(
-    status_codes(201, 400, 401),
+    status_codes(201, 400, 403),
     request_body(content = CreateAclRequest, description = "Create a new ACL"),
     responses(
         (status_code = 201, description = "ACL created successfully"),
         (status_code = 400, description = "Bad Request"),
-        (status_code = 401, description = "Unauthorized")
+        (status_code = 403, description = "FORBIDDEN")
     )
 )]
 async fn create_acl(
@@ -61,10 +61,10 @@ pub struct CreateAclRequest {
 
 /// Get ACL for specified resources
 #[endpoint(
-    status_codes(200, 401, 404),
+    status_codes(200, 403, 404),
     responses(
         (status_code = 200, description = "Get ACL successfully", body = GetAclResponse),
-        (status_code = 401, description = "Unauthorized"),
+        (status_code = 403, description = "FORBIDDEN"),
         (status_code = 404, description = "Not Found")
     )
 )]
@@ -96,10 +96,10 @@ impl Scribe for GetAclResponse {
 
 /// Delete ACL for specified resources
 #[endpoint(
-    status_codes(204, 401, 404),
+    status_codes(204, 403, 404),
     responses(
         (status_code = 204, description = "ACL deleted successfully"),
-        (status_code = 401, description = "Unauthorized"),
+        (status_code = 403, description = "FORBIDDEN"),
         (status_code = 404, description = "Not Found")
     )
 )]

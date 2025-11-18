@@ -14,7 +14,7 @@ pub fn assert_not_found<T: std::fmt::Debug>(result: StoreResult<T>) {
     }
 }
 
-pub fn assert_unauthorized<T: std::fmt::Debug>(result: StoreResult<T>) {
+pub fn assert_permission_denied<T: std::fmt::Debug>(result: StoreResult<T>) {
     match result {
         Err(StoreError::PermissionDenied) => {}
         _rest => panic!("Expected PermissionDenied error, got: {:?}", _rest),

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use salvo::{
-    Depot, Request, Response, Router, Scribe, Writer,
+    Depot, Response, Router, Scribe, Writer,
     oapi::{RouterExt, ToResponse, ToSchema, endpoint, extract::JsonBody},
     writing::Json,
 };
@@ -13,7 +13,7 @@ use crate::{
     utils::jwt::{generate_jwt_token, generate_refresh_token, verify_refresh_token},
 };
 
-static COOKIE_HTTPS_ONLY: bool = false; // TODO: set to true in production
+// static COOKIE_HTTPS_ONLY: bool = false; // TODO: set to true in production
 
 pub fn create_router() -> Router {
     Router::new()
@@ -48,7 +48,7 @@ pub fn create_non_auth_router() -> Router {
 async fn login(
     req: JsonBody<NameLoginRequest>,
     depot: &mut Depot,
-    resp: &mut Response,
+    _resp: &mut Response,
 ) -> ServiceResult<LoginResponse> {
     tracing::info!("Login attempt for user: {}", req.username);
     let store = depot.obtain::<Arc<Store>>()?;
@@ -58,14 +58,14 @@ async fn login(
     let access_token = generate_jwt_token(user_id.clone())?;
     let refresh_token = generate_refresh_token(user_id.clone())?;
 
-    resp.add_cookie(
-        salvo::http::cookie::CookieBuilder::new("refresh_token", refresh_token.clone())
-            .max_age(salvo::http::cookie::time::Duration::days(7))
-            .same_site(salvo::http::cookie::SameSite::Lax)
-            .http_only(true)
-            .secure(COOKIE_HTTPS_ONLY)
-            .build(),
-    );
+    // resp.add_cookie(
+    //     salvo::http::cookie::CookieBuilder::new("refresh_token", refresh_token.clone())
+    //         .max_age(salvo::http::cookie::time::Duration::days(7))
+    //         .same_site(salvo::http::cookie::SameSite::Lax)
+    //         .http_only(true)
+    //         .secure(COOKIE_HTTPS_ONLY)
+    //         .build(),
+    // );
 
     Ok(LoginResponse {
         access_token,
@@ -79,28 +79,30 @@ async fn login(
 /// Returns a new access token and a new refresh token.
 #[endpoint(
     status_codes(200, 401),
+    request_body(content = RefreshRequest, description = "Refresh access token"),
     responses(
         (status_code = 200, description = "Token refreshed successfully", body = LoginResponse),
         (status_code = 401, description = "Unauthorized")
     )
 )]
-async fn refresh(req: &mut Request, resp: &mut Response) -> ServiceResult<LoginResponse> {
-    let refresh_token = req
-        .cookies()
-        .get("refresh_token")
-        .ok_or_else(|| ServiceError::Unauthorized("No refresh token found".to_string()))?
-        .value();
+async fn refresh(req: JsonBody<RefreshRequest>, _resp: &mut Response) -> ServiceResult<LoginResponse> {
+    // let refresh_token = req
+    //     .cookies()
+    //     .get("refresh_token")
+    //     .ok_or_else(|| ServiceError::Unauthorized("No refresh token found".to_string()))?
+    //     .value();
+    let refresh_token = &req.refresh_token;
     let user_id = verify_refresh_token(refresh_token)?.sub;
     let access_token = generate_jwt_token(user_id.clone())?;
     let refresh_token = generate_refresh_token(user_id.clone())?;
-    resp.add_cookie(
-        salvo::http::cookie::CookieBuilder::new("refresh_token", refresh_token.clone())
-            .max_age(salvo::http::cookie::time::Duration::days(7))
-            .same_site(salvo::http::cookie::SameSite::Lax)
-            .http_only(true)
-            .secure(COOKIE_HTTPS_ONLY)
-            .build(),
-    );
+    // resp.add_cookie(
+    //     salvo::http::cookie::CookieBuilder::new("refresh_token", refresh_token.clone())
+    //         .max_age(salvo::http::cookie::time::Duration::days(7))
+    //         .same_site(salvo::http::cookie::SameSite::Lax)
+    //         .http_only(true)
+    //         .secure(COOKIE_HTTPS_ONLY)
+    //         .build(),
+    // );
 
     Ok(LoginResponse {
         access_token,
@@ -116,6 +118,13 @@ struct NameLoginRequest {
     username: String,
     #[salvo(schema(example = "pswd1234"))]
     password: String,
+}
+
+/// Request body for refresh
+#[derive(Deserialize, ToSchema)]
+struct RefreshRequest {
+    #[salvo(schema(example = "refresh_token_string"))]
+    refresh_token: String,
 }
 
 /// Response data for login
