@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 
 use std::sync::OnceLock;
 
-use crate::{config::Jwt, error::ServiceResult};
+use crate::{
+    config::Jwt,
+    error::{ServiceError, ServiceResult},
+};
 static ACCESS_TOKEN_SECRET: OnceLock<String> = OnceLock::new();
 static REFRESH_TOKEN_SECRET: OnceLock<String> = OnceLock::new();
 
@@ -99,5 +102,10 @@ pub fn verify_refresh_token(token: &str) -> ServiceResult<JwtClaims> {
         &jsonwebtoken::DecodingKey::from_secret(get_refresh_secret().as_bytes()),
         &jsonwebtoken::Validation::default(),
     )?;
+    if token_data.claims.is_expired() {
+        return Err(ServiceError::Unauthorized(
+            "Refresh token invalid or expired".to_string(),
+        ));
+    }
     Ok(token_data.claims)
 }

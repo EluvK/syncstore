@@ -64,7 +64,7 @@ impl Scribe for ServiceError {
                 }
             },
             ServiceError::JwtError(_) => {
-                res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+                res.status_code(StatusCode::UNAUTHORIZED);
             }
             ServiceError::InternalServerError(_) => {
                 res.status_code(StatusCode::INTERNAL_SERVER_ERROR);

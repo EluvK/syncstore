@@ -50,7 +50,7 @@ pub async fn init_service(store: Arc<store::Store>, config: &config::ServiceConf
         },
         async {
             let acceptor = TcpListener::new(config.address.clone()).bind().await;
-            let service = Service::new(router);
+            let service = Service::new(router).hoop(Logger::new());
             tracing::info!("Server started at {}", &config.address);
             Server::new(acceptor).serve(service).await
         }

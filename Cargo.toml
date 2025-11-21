@@ -17,7 +17,12 @@ jsonschema = "0.35.0"
 r2d2 = "0.8.10"
 r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
 rusqlite = { version = "0.37.0", features = ["bundled", "chrono"] }
-salvo = { version = "0.84.2", features = ["affix-state", "jwt-auth", "oapi"] }
+salvo = { version = "0.84.2", features = [
+    "affix-state",
+    "jwt-auth",
+    "logging",
+    "oapi",
+] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 tempfile = "3.23.0"
