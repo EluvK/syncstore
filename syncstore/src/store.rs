@@ -5,7 +5,7 @@ use serde_json::Value;
 use crate::backend::Backend;
 use crate::components::{AclManager, DataManager, DataManagerBuilder, DataSchemas, UserManager};
 use crate::error::{StoreError, StoreResult};
-use crate::types::{ACLMask, AccessControl, DataItem, Id, Meta};
+use crate::types::{ACLMask, AccessControl, DataItem, Id, Meta, UserSchema};
 
 pub struct Store {
     data_manager: Arc<DataManager>,
@@ -46,8 +46,12 @@ impl Store {
     pub fn validate_user(&self, username: &str, password: &str) -> StoreResult<Option<String>> {
         self.user_manager.validate_user(username, password)
     }
-    pub fn get_user(&self, username: &String) -> StoreResult<String> {
-        self.user_manager.get_user(username)
+    pub fn get_user(&self, user_id: &String) -> StoreResult<UserSchema> {
+        self.user_manager.get_user(user_id)
+    }
+
+    pub fn update_user(&self, user_id: &String, user_schema: &UserSchema) -> StoreResult<Meta> {
+        self.user_manager.update_user(user_id, user_schema)
     }
 
     pub fn create_user(&self, username: &str, password: &str) -> StoreResult<()> {

@@ -3,7 +3,7 @@ use std::{path::Path, sync::Arc};
 use crate::{
     backend::{Backend, SqliteBackend, sqlite::SqliteBackendBuilder},
     error::StoreResult,
-    types::Meta,
+    types::{Meta, UserSchema},
     utils::constant::{ROOT_OWNER, USER_TABLE},
 };
 
@@ -21,7 +21,8 @@ impl UserManager {
             "type": "object",
             "properties": {
                 "username": { "type": "string" },
-                "password": { "type": "string" }
+                "password": { "type": "string" },
+                "avatar_url": { "type": "string" }
             },
             "required": ["username", "password"],
             "x-unique": "username"
@@ -55,9 +56,14 @@ impl UserManager {
         }
     }
 
-    pub fn get_user(&self, user_id: &String) -> StoreResult<String> {
+    pub fn get_user(&self, user_id: &String) -> StoreResult<UserSchema> {
         let item = self.backend.get(USER_TABLE, user_id)?;
-        Ok(item.id)
+        let user_profile = serde_json::from_value::<UserSchema>(item.body)?;
+        Ok(user_profile)
+    }
+
+    pub fn update_user(&self, user_id: &String, user: &UserSchema) -> StoreResult<Meta> {
+        self.backend.update(USER_TABLE, user_id, &serde_json::to_value(user)?)
     }
 
     pub fn get_inner_backend(&self) -> Arc<dyn Backend> {

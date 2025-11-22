@@ -8,28 +8,11 @@ use crate::error::StoreError;
 pub type Id = String;
 pub type Uid = String;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
-    pub id: Uid,
-    pub name: String,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UserSchema {
+    pub username: String,
     pub password: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
     pub avatar_url: Option<String>,
-}
-
-impl User {
-    pub fn new(name: String, password: String, avatar_url: Option<String>) -> Self {
-        let now = Utc::now();
-        Self {
-            id: Uuid::new_v4().to_string(),
-            name,
-            password,
-            created_at: now,
-            updated_at: now,
-            avatar_url,
-        }
-    }
 }
 
 /// Meta fields automatically added to each record.

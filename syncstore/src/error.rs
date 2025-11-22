@@ -36,6 +36,9 @@ pub enum ServiceError {
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
 
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
     #[error("Internal server error: {0}")]
     InternalServerError(String),
 }
@@ -48,6 +51,9 @@ impl Scribe for ServiceError {
         match self {
             ServiceError::Unauthorized(_) => {
                 res.status_code(StatusCode::UNAUTHORIZED);
+            }
+            ServiceError::Forbidden(_) => {
+                res.status_code(StatusCode::FORBIDDEN);
             }
             ServiceError::StoreError(store_error) => match &store_error {
                 StoreError::NotFound(_) => {

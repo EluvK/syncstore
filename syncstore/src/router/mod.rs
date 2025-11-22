@@ -38,6 +38,7 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
         .hoop(jwt_to_user)
         .push(Router::with_path("acl").push(acl::create_router()))
         .push(Router::with_path("auth").push(auth::create_router()))
+        .push(Router::with_path("user").push(user::create_router()))
         .push(Router::with_path("data").push(data::create_router()))
         .oapi_security(SecurityRequirement::new("bearer", vec!["bearer"]));
     Router::new()
@@ -74,13 +75,14 @@ async fn jwt_to_user(
                 return Ok(());
             }
             let store = depot.obtain::<Arc<Store>>()?;
-            let Ok(user_id) = store.get_user(&claim.sub) else {
+            let user_id = claim.sub.clone();
+            let Ok(user) = store.get_user(&user_id) else {
                 tracing::info!("Unauthorized: User not found");
                 res.render(ServiceError::Unauthorized("User not found".to_string()));
                 ctrl.skip_rest();
                 return Ok(());
             };
-            tracing::info!("Authorized. user_id: {}", user_id);
+            tracing::info!("Authorized. user:{}({})", user.username, user_id);
             depot.insert("user_id", user_id.clone());
             ctrl.call_next(req, depot, res).await;
         }
