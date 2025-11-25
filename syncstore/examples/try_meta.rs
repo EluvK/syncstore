@@ -54,6 +54,38 @@ impl Keyword for DbExists {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "name": {"type": ["string", "null"]},
+        },
+        "required": ["id"]
+    });
+
+    let data1 = serde_json::from_str("{\"id\": \"123\", \"name\": \"Alice\"}")?;
+    let data2 = serde_json::from_str("{\"id\": \"456\"}")?;
+    let data3 = serde_json::from_str("{\"id\": \"789\", \"name\": null}")?;
+
+    let options = jsonschema::draft7::options();
+    let compiled = options.build(&schema)?;
+    match compiled.validate(&data1) {
+        Ok(_) => println!("data1 is valid"),
+        Err(e) => println!("data1 is invalid: {:?}", e),
+    }
+    match compiled.validate(&data2) {
+        Ok(_) => println!("data2 is valid"),
+        Err(e) => println!("data2 is invalid: {:?}", e),
+    }
+    match compiled.validate(&data3) {
+        Ok(_) => println!("data3 is valid"),
+        Err(e) => println!("data3 is invalid: {:?}", e),
+    }
+
+    Ok(())
+}
+
+fn _main() -> Result<(), Box<dyn std::error::Error>> {
     // 模拟数据库
     let mut set = HashSet::new();
     set.insert("u1".to_string());

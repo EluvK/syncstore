@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
             "type": "object",
             "properties": {
                 "name": { "type": "string" },
-                "description": { "type": "string" },
+                "description": { "type": ["string", "null"] },
                 "status": { "type": "string", "enum": ["normal", "deleted"] }
             },
             "required": ["name", "status"]
@@ -30,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
                 "content": { "type": "string" },
                 "repo_id": { "type": "string" }
             },
-            "required": ["title", "repo_id"],
+            "required": ["title", "repo_id", "category", "content"],
             "x-parent-id": { "parent": "repo", "field": "repo_id" }
         }),
         // ✅ query users' subscriptions: list_by_owner()
@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
             "properties": {
                 "content": { "type": "string" },
                 "post_id": { "type": "string" },
-                "parent_id": { "type": "string" }
+                "parent_id": { "type": ["string", "null"] }
             },
             "required": ["content", "post_id"],
             "x-parent-id": { "parent": "post", "field": "post_id" }
