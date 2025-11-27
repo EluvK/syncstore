@@ -87,6 +87,36 @@ impl From<DataItem> for Meta {
     }
 }
 
+/// DataItemSummary
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, salvo::oapi::ToSchema, salvo::oapi::ToResponse)]
+pub struct DataItemSummary {
+    pub id: Id,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub owner: Uid,
+    pub unique: Option<String>,
+    pub parent_id: Option<String>,
+}
+
+impl salvo::Scribe for DataItemSummary {
+    fn render(self, res: &mut salvo::Response) {
+        res.render(salvo::writing::Json(self));
+    }
+}
+
+impl From<DataItem> for DataItemSummary {
+    fn from(value: DataItem) -> Self {
+        Self {
+            id: value.id,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+            owner: value.owner,
+            unique: value.unique,
+            parent_id: value.parent_id,
+        }
+    }
+}
+
 impl Meta {
     pub fn new(owner: Uid, unique: Option<String>) -> Self {
         let now = Utc::now();

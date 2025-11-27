@@ -11,7 +11,11 @@ use salvo::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{error::ServiceResult, store::Store, types::DataItem};
+use crate::{
+    error::ServiceResult,
+    store::Store,
+    types::{DataItem, DataItemSummary},
+};
 
 pub fn create_router() -> Router {
     Router::with_path("{namespace}/{collection}")
@@ -25,7 +29,7 @@ pub fn create_router() -> Router {
         .oapi_tag("data")
 }
 
-/// List data items with pagination
+/// List data items summary with pagination
 #[endpoint(
     status_codes(200, 403),
     responses(
@@ -71,14 +75,13 @@ async fn list_data(
             count: items.len(),
             next_marker,
         },
-        items,
+        items: items.into_iter().map(Into::into).collect(),
     })
 }
 
 #[derive(Serialize, ToResponse, ToSchema)]
 struct ListDataResponse {
-    // todo might use summary info for list api
-    items: Vec<DataItem>,
+    items: Vec<DataItemSummary>,
     page_info: PageInfo,
 }
 
