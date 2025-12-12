@@ -4,7 +4,7 @@ use crate::{
     backend::{Backend, SqliteBackend, sqlite::SqliteBackendBuilder},
     error::StoreResult,
     types::{Meta, UserSchema},
-    utils::constant::{ROOT_OWNER, USER_TABLE},
+    utils::constant::{FRIENDS_TABLE, ROOT_OWNER, USER_TABLE},
 };
 
 pub struct UserManager {
@@ -27,9 +27,20 @@ impl UserManager {
             "required": ["username", "password"],
             "x-unique": "username"
         });
+        let friend_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "friend_id": { "type": "string" },
+                "unique_key": { "type": "string" },
+            },
+            "required": ["friend_id"],
+            "x-parent-id": { "parent": USER_TABLE, "field": "friend_id" },
+            "x-unique": "unique_key"
+        });
         let backend = Arc::new(
             SqliteBackendBuilder::file(path)
                 .with_collection_schema(USER_TABLE, user_schema)
+                .with_collection_schema(FRIENDS_TABLE, friend_schema)
                 .build()?,
         );
 
@@ -68,5 +79,31 @@ impl UserManager {
 
     pub fn get_inner_backend(&self) -> Arc<dyn Backend> {
         self.backend.clone()
+    }
+
+    pub fn add_friend(&self, user_id: &String, friend_id: &String) -> StoreResult<Meta> {
+        let body = serde_json::json!({
+            "friend_id": friend_id,
+            "unique_key": format!("{}:{}", user_id, friend_id),
+        });
+        let meta = Meta::new(user_id.to_string(), None);
+        let inserted_meta = self.backend.insert(FRIENDS_TABLE, &body, meta)?;
+        Ok(inserted_meta)
+    }
+
+    pub fn list_friends(&self, user_id: &String) -> StoreResult<Vec<String>> {
+        // todo better with pagination
+        let items = self.backend.list_by_owner(FRIENDS_TABLE, user_id, None, 100)?;
+        let friend_ids = items
+            .0
+            .into_iter()
+            .filter_map(|item| {
+                item.body
+                    .get("friend_id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
+            .collect();
+        Ok(friend_ids)
     }
 }

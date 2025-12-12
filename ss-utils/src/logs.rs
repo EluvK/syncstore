@@ -32,9 +32,15 @@ pub fn enable_log(config: &LogConfig) -> anyhow::Result<impl Drop> {
 
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
+    let time_offset = time::macros::offset!(+8);
+    let time_format =
+        time::format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]+08:00")
+            .expect("time format should be valid");
+    let timer = tracing_subscriber::fmt::time::OffsetTime::new(time_offset, time_format);
+
     let mut subscriber = tracing_subscriber::fmt()
         .with_writer(non_blocking)
-        .with_timer(tracing_subscriber::fmt::time::UtcTime::rfc_3339())
+        .with_timer(timer)
         .with_ansi(false);
     if config.enable_debug {
         subscriber = subscriber.with_max_level(tracing::Level::DEBUG);

@@ -16,9 +16,9 @@ use crate::{
 };
 
 pub fn create_router() -> Router {
-    Router::with_path("{id}")
-        .get(get_self_user)
-        .post(update_user)
+    Router::new()
+        .push(Router::with_path("profile").push(Router::with_path("{id}").get(get_user).post(update_user)))
+        .push(Router::with_path("friends").get(list_friends).post(add_friend))
         .oapi_tag("user")
 }
 
@@ -53,7 +53,7 @@ impl UserProfile {
         (status_code = 403, description = "FORBIDDEN"),
     )
 )]
-async fn get_self_user(id: PathParam<String>, depot: &mut Depot) -> ServiceResult<UserProfile> {
+async fn get_user(id: PathParam<String>, depot: &mut Depot) -> ServiceResult<UserProfile> {
     let store = depot.obtain::<Arc<Store>>()?;
     let user_schema = store.get_user(&id)?;
     let user = UserProfile::from_user_schema(id.to_string(), &user_schema);
@@ -103,4 +103,55 @@ pub struct UpdateUserProfile {
     pub name: Option<String>,
     pub password: Option<String>,
     pub avatar_url: Option<String>,
+}
+
+/// List friends of the user
+#[endpoint(
+    status_codes(200, 403),
+    responses(
+        (status_code = 200, description = "List friends successfully", body = ListFriendsResponse),
+        (status_code = 403, description = "FORBIDDEN"),
+    )
+)]
+async fn list_friends(depot: &mut Depot) -> ServiceResult<ListFriendsResponse> {
+    let store = depot.obtain::<Arc<Store>>()?;
+    let user_id = depot.get::<String>("user_id")?.to_string();
+    let friend_schemas = store.list_friends(&user_id)?;
+    let friends = friend_schemas
+        .into_iter()
+        .map(|(user_id, friend_schema)| UserProfile::from_user_schema(user_id, &friend_schema))
+        .collect();
+    Ok(ListFriendsResponse { friends })
+}
+
+#[derive(Serialize, ToSchema, ToResponse)]
+struct ListFriendsResponse {
+    friends: Vec<UserProfile>,
+}
+
+impl salvo::Scribe for ListFriendsResponse {
+    fn render(self, res: &mut salvo::Response) {
+        res.render(salvo::writing::Json(self));
+    }
+}
+
+/// Add a friend by user ID
+#[endpoint(
+    status_codes(201, 400, 403),
+    responses(
+        (status_code = 201, description = "Add friend successfully"),
+        (status_code = 400, description = "BAD REQUEST"),
+        (status_code = 403, description = "FORBIDDEN"),
+    )
+)]
+async fn add_friend(req: JsonBody<AddFriendRequest>, depot: &mut Depot) -> ServiceResult<()> {
+    let store = depot.obtain::<Arc<Store>>()?;
+    let user_id = depot.get::<String>("user_id")?.to_string();
+    store.add_friend(&user_id, &req.0.friend_id)?;
+    Ok(())
+}
+
+#[derive(Deserialize, ToSchema)]
+struct AddFriendRequest {
+    friend_id: String,
 }

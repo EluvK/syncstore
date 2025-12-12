@@ -61,10 +61,27 @@ impl Store {
     pub fn get_user_backend(&self) -> Arc<dyn Backend> {
         self.user_manager.get_inner_backend()
     }
+
+    pub fn list_friends(&self, user_id: &String) -> StoreResult<Vec<(String, UserSchema)>> {
+        let friend_ids = self.user_manager.list_friends(user_id)?;
+        let mut friends = Vec::new();
+        for friend_id in friend_ids {
+            if let Ok(user_schema) = self.get_user(&friend_id) {
+                friends.push((friend_id, user_schema));
+            }
+        }
+        Ok(friends)
+    }
+    pub fn add_friend(&self, user_id: &String, friend_id: &String) -> StoreResult<()> {
+        self.user_manager.add_friend(user_id, friend_id)?;
+        self.user_manager.add_friend(friend_id, user_id)?;
+        Ok(())
+    }
 }
 
 /// Data operations, CRUD using data manager, re-expose here for convenience
 impl Store {
+    // -- CRUD operations below --
     /// Insert a document body. Returns meta including generated id.
     pub fn insert(&self, namespace: &str, collection: &str, body: &Value, user: &str) -> StoreResult<Meta> {
         let backend = self.data_manager.backend_for(namespace)?;
