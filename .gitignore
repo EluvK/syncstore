@@ -1,5 +1,7 @@
 /target
 
+/fs
+
 # local test
 /logs
 /db_test

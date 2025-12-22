@@ -2,6 +2,7 @@ mod acl;
 mod admin;
 mod auth;
 mod data;
+mod fs;
 mod health;
 mod user;
 
@@ -32,14 +33,15 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
 
     let non_auth_router = Router::new()
         .push(Router::with_path("auth").push(auth::create_non_auth_router()))
+        .push(Router::with_path("fs").push(fs::create_router()))
         .push(health::create_router());
     let auth_router = Router::new()
         .hoop(auth_handler)
         .hoop(jwt_to_user)
         .push(Router::with_path("acl").push(acl::create_router()))
         .push(Router::with_path("auth").push(auth::create_router()))
-        .push(Router::with_path("user").push(user::create_router()))
         .push(Router::with_path("data").push(data::create_router()))
+        .push(Router::with_path("user").push(user::create_router()))
         .oapi_security(SecurityRequirement::new("bearer", vec!["bearer"]));
     Router::new()
         .hoop(affix_state::inject(store))
