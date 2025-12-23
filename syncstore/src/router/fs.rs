@@ -1,9 +1,19 @@
 use salvo::{Request, Response, Router, handler, http::HeaderValue, prelude::StaticDir};
 
+pub fn create_non_auth_router() -> Router {
+    Router::with_path("/public/{*path}").hoop(cache_policies).get(
+        StaticDir::new(vec!["./fs/public"])
+            .auto_list(true)
+            .chunk_size(2 * 1024 * 1024),
+    )
+}
+
 pub fn create_router() -> Router {
-    Router::with_path("{*path}")
-        .hoop(cache_policies)
-        .get(StaticDir::new(vec!["./fs"]).auto_list(true).chunk_size(2 * 1024 * 1024))
+    Router::with_path("/private/{*path}").hoop(cache_policies).get(
+        StaticDir::new(vec!["./fs/private"])
+            .auto_list(true)
+            .chunk_size(2 * 1024 * 1024),
+    )
 }
 
 #[handler]
