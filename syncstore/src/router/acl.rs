@@ -20,23 +20,23 @@ pub fn create_router() -> Router {
         .push(
             Router::with_path("{id}")
                 .get(get_acl)
-                .post(create_acl)
+                .post(update_acl)
                 .delete(delete_acl),
         )
         .oapi_tag("acl")
 }
 
-/// Create a new ACL for specified resources
+/// Update ACL for specified resources
 #[endpoint(
     status_codes(201, 400, 403),
-    request_body(content = CreateAclRequest, description = "Create a new ACL"),
+    request_body(content = CreateAclRequest, description = "Update ACL"),
     responses(
         (status_code = 201, description = "ACL created successfully"),
         (status_code = 400, description = "Bad Request"),
         (status_code = 403, description = "FORBIDDEN")
     )
 )]
-async fn create_acl(
+async fn update_acl(
     namespace: PathParam<String>,
     collection: PathParam<String>,
     id: PathParam<String>,
@@ -49,8 +49,9 @@ async fn create_acl(
         data_id: id.to_string(),
         permissions: req.permissions.clone(),
     };
-    store.create_acl((namespace.as_str(), collection.as_str()), acl, user)?;
-    tracing::info!("create_acl for data {}", id.as_str());
+    
+    store.update_acl((namespace.as_str(), collection.as_str()), acl, user)?;
+    tracing::info!("update_acl for data {}", id.as_str());
     Ok(())
 }
 

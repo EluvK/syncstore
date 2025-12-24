@@ -215,16 +215,6 @@ impl Store {
 
 /// ACL related operations
 impl Store {
-    pub fn create_acl(&self, (namespace, collection): (&str, &str), acl: AccessControl, user: &str) -> StoreResult<()> {
-        let data = self.get(namespace, collection, &acl.data_id, user)?;
-        // only owner can set ACL for the data
-        if data.owner != user {
-            return Err(StoreError::PermissionDenied);
-        }
-        self.acl_manager.create_acl(acl, user)?;
-        Ok(())
-    }
-
     pub fn get_acl(
         &self,
         (namespace, collection): (&str, &str),
@@ -235,8 +225,17 @@ impl Store {
         if data.owner != user {
             return Err(StoreError::PermissionDenied);
         }
-        let acl = self.acl_manager.get_acl(data_id)?;
-        Ok(acl)
+        match self.acl_manager.get_acl(data_id) {
+            Ok(acl) => Ok(acl),
+            Err(StoreError::NotFound(_)) => {
+                // return empty ACL if not found
+                Ok(AccessControl {
+                    data_id: data_id.to_string(),
+                    permissions: Vec::new(),
+                })
+            }
+            Err(e) => Err(e),
+        }
     }
 
     pub fn update_acl(&self, (namespace, collection): (&str, &str), acl: AccessControl, user: &str) -> StoreResult<()> {
@@ -245,8 +244,21 @@ impl Store {
         if data.owner != user {
             return Err(StoreError::PermissionDenied);
         }
-        self.acl_manager.update_acl(acl)?;
-        Ok(())
+        match self.acl_manager.get_acl(&acl.data_id) {
+            Ok(_c) => {
+                // existing, update
+                self.acl_manager.update_acl(acl)?;
+                return Ok(());
+            }
+            Err(StoreError::NotFound(_e)) => {
+                // not found, create
+                self.acl_manager.create_acl(acl, user)?;
+                return Ok(());
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
     }
 
     pub fn delete_acl(&self, (namespace, collection): (&str, &str), data_id: &str, user: &str) -> StoreResult<()> {

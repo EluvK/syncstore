@@ -29,7 +29,7 @@ fn acl_basic_crud() -> Result<(), Box<dyn std::error::Error>> {
 
     // user1 creates ACL for user2
     let acl = gen_acl(&repo_id, user2, AccessLevel::Write);
-    store.create_acl((namespace, "repo"), acl.clone(), user1)?;
+    store.update_acl((namespace, "repo"), acl.clone(), user1)?;
 
     // user2 can update the repo with ACL
     let item = store.get(namespace, "repo", &repo_id, user2)?;
@@ -90,8 +90,8 @@ fn grant_acl_with_full_access() -> Result<(), Box<dyn std::error::Error>> {
     // user1 grants user2 full access to the repo
     let acl = gen_acl(&repo_id, user2, AccessLevel::FullAccess);
     // only owner can create ACL
-    assert_permission_denied(store.create_acl((namespace, "repo"), acl.clone(), user2));
-    store.create_acl((namespace, "repo"), acl, user1)?;
+    assert_permission_denied(store.update_acl((namespace, "repo"), acl.clone(), user2));
+    store.update_acl((namespace, "repo"), acl, user1)?;
 
     // user2 can now access the repo
     let item = store.get(namespace, "repo", &repo_id, user2)?;
@@ -136,7 +136,7 @@ fn grant_read_can_only_get() -> Result<(), Box<dyn std::error::Error>> {
 
     // user1 grants user2 read access to the repo
     let acl = gen_acl(&repo_id, user2, AccessLevel::Read);
-    store.create_acl((namespace, "repo"), acl, user1)?;
+    store.update_acl((namespace, "repo"), acl, user1)?;
 
     // user2 can access the repo
     let item = store.get(namespace, "repo", &repo_id, user2)?;
@@ -180,7 +180,7 @@ fn grant_update_can_read_and_update() -> Result<(), Box<dyn std::error::Error>> 
 
     // user1 grants user2 update access to the repo
     let acl = gen_acl(&repo_id, user2, AccessLevel::Update);
-    store.create_acl((namespace, "repo"), acl, user1)?;
+    store.update_acl((namespace, "repo"), acl, user1)?;
 
     // user2 can access the repo
     let item = store.get(namespace, "repo", &repo_id, user2)?;
@@ -226,7 +226,7 @@ fn grant_create_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> 
 
     // user1 grants user2 create access to the repo
     let acl = gen_acl(&repo_id, user2, AccessLevel::Create);
-    store.create_acl((namespace, "repo"), acl, user1)?;
+    store.update_acl((namespace, "repo"), acl, user1)?;
 
     // user1 put a post under the repo to test parent permission check
     let post_doc = json!({ "title": "Initial Post", "category": "test", "content": "This is the initial post.", "repo_id": repo_id });
@@ -278,7 +278,7 @@ fn grant_write_can_read_update_insert() -> Result<(), Box<dyn std::error::Error>
 
     // user1 grants user2 write access to the repo
     let acl = gen_acl(&repo_id, user2, AccessLevel::Write);
-    store.create_acl((namespace, "repo"), acl, user1)?;
+    store.update_acl((namespace, "repo"), acl, user1)?;
 
     // user2 can access the repo
     let item = store.get(namespace, "repo", &repo_id, user2)?;
