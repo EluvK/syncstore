@@ -25,7 +25,7 @@ fn acl_basic_crud() -> Result<(), Box<dyn std::error::Error>> {
     // user1 insert new repo
     let repo_doc =
         json!({ "name": "ACL CRUD Repo", "description": "Repository for ACL CRUD test", "status": "normal" });
-    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?;
 
     // user1 creates ACL for user2
     let acl = gen_acl(&repo_id, user2, AccessLevel::Write);
@@ -38,8 +38,7 @@ fn acl_basic_crud() -> Result<(), Box<dyn std::error::Error>> {
     if let serde_json::Value::Object(ref mut map) = updated {
         map.insert("description".to_string(), json!("Updated by user2 with ACL"));
     }
-    store.update(namespace, "repo", &repo_id, &updated, user2)?;
-    let item = store.get(namespace, "repo", &repo_id, user2)?;
+    let item = store.update(namespace, "repo", &repo_id, &updated, user2)?;
     assert_eq!(item.body["description"], "Updated by user2 with ACL");
 
     // user1 gets the ACL
@@ -82,7 +81,7 @@ fn grant_acl_with_full_access() -> Result<(), Box<dyn std::error::Error>> {
 
     // user1 insert new repo
     let repo_doc = json!({ "name": "ACL Repo", "description": "Repository for ACL test", "status": "normal" });
-    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?;
 
     // user2 cannot access the repo
     assert_permission_denied(store.get(namespace, "repo", &repo_id, user2));
@@ -102,14 +101,13 @@ fn grant_acl_with_full_access() -> Result<(), Box<dyn std::error::Error>> {
     if let serde_json::Value::Object(ref mut map) = updated {
         map.insert("description".to_string(), json!("Updated by user2"));
     }
-    store.update(namespace, "repo", &repo_id, &updated, user2)?;
-    let item = store.get(namespace, "repo", &repo_id, user2)?;
+    let item = store.update(namespace, "repo", &repo_id, &updated, user2)?;
     assert_eq!(item.body["description"], "Updated by user2");
 
     // user2 can insert child data (post) under the repo
     let post_doc =
         json!({ "title": "Post by user2", "category": "test", "content": "This is a test post.", "repo_id": repo_id });
-    let post_id = store.insert(namespace, "post", &post_doc, user2)?.id;
+    let post_id = store.insert(namespace, "post", &post_doc, user2)?;
     let post_item = store.get(namespace, "post", &post_id, user2)?;
     assert_eq!(post_item.body["title"], "Post by user2");
 
@@ -132,7 +130,7 @@ fn grant_read_can_only_get() -> Result<(), Box<dyn std::error::Error>> {
     // user1 insert new repo
     let repo_doc =
         json!({ "name": "ReadOnly Repo", "description": "Repository for read-only ACL test", "status": "normal" });
-    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?;
 
     // user1 grants user2 read access to the repo
     let acl = gen_acl(&repo_id, user2, AccessLevel::Read);
@@ -176,7 +174,7 @@ fn grant_update_can_read_and_update() -> Result<(), Box<dyn std::error::Error>> 
     // user1 insert new repo
     let repo_doc =
         json!({ "name": "Update Repo", "description": "Repository for update ACL test", "status": "normal" });
-    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?;
 
     // user1 grants user2 update access to the repo
     let acl = gen_acl(&repo_id, user2, AccessLevel::Update);
@@ -191,8 +189,7 @@ fn grant_update_can_read_and_update() -> Result<(), Box<dyn std::error::Error>> 
     if let serde_json::Value::Object(ref mut map) = updated {
         map.insert("description".to_string(), json!("Updated by user2 with update access"));
     }
-    store.update(namespace, "repo", &repo_id, &updated, user2)?;
-    let item = store.get(namespace, "repo", &repo_id, user2)?;
+    let item = store.update(namespace, "repo", &repo_id, &updated, user2)?;
     assert_eq!(item.body["description"], "Updated by user2 with update access");
 
     // user2 cannot insert child data (post) under the repo
@@ -222,7 +219,7 @@ fn grant_create_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> 
     // user1 insert new repo
     let repo_doc =
         json!({ "name": "Create Repo", "description": "Repository for create ACL test", "status": "normal" });
-    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?;
 
     // user1 grants user2 create access to the repo
     let acl = gen_acl(&repo_id, user2, AccessLevel::Create);
@@ -230,7 +227,7 @@ fn grant_create_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> 
 
     // user1 put a post under the repo to test parent permission check
     let post_doc = json!({ "title": "Initial Post", "category": "test", "content": "This is the initial post.", "repo_id": repo_id });
-    let post_id = store.insert(namespace, "post", &post_doc, user1)?.id;
+    let post_id = store.insert(namespace, "post", &post_doc, user1)?;
 
     // user2 can access the repo
     let item = store.get(namespace, "repo", &repo_id, user2)?;
@@ -253,9 +250,10 @@ fn grant_create_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> 
     // user2 can add child data (post) under the repo
     let new_post_doc =
         json!({ "title": "Post by user2", "category": "test", "content": "This is a test post.", "repo_id": repo_id });
-    let new_post_id = store.insert(namespace, "post", &new_post_doc, user2)?.id;
+    let new_post_id = store.insert(namespace, "post", &new_post_doc, user2)?;
     let new_post_item = store.get(namespace, "post", &new_post_id, user2)?;
     assert_eq!(new_post_item.body["title"], "Post by user2");
+    assert_eq!(new_post_item.owner, *user2);
 
     // user2 cannot delete the repo
     assert_permission_denied(store.delete(namespace, "repo", &repo_id, user2));
@@ -274,7 +272,7 @@ fn grant_write_can_read_update_insert() -> Result<(), Box<dyn std::error::Error>
 
     // user1 insert new repo
     let repo_doc = json!({ "name": "Write Repo", "description": "Repository for write ACL test", "status": "normal" });
-    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?.id;
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?;
 
     // user1 grants user2 write access to the repo
     let acl = gen_acl(&repo_id, user2, AccessLevel::Write);
@@ -289,14 +287,13 @@ fn grant_write_can_read_update_insert() -> Result<(), Box<dyn std::error::Error>
     if let serde_json::Value::Object(ref mut map) = updated {
         map.insert("description".to_string(), json!("Updated by user2 with write access"));
     }
-    store.update(namespace, "repo", &repo_id, &updated, user2)?;
-    let item = store.get(namespace, "repo", &repo_id, user2)?;
+    let item = store.update(namespace, "repo", &repo_id, &updated, user2)?;
     assert_eq!(item.body["description"], "Updated by user2 with write access");
 
     // user2 can insert child data (post) under the repo
     let post_doc =
         json!({ "title": "Post by user2", "category": "test", "content": "This is a test post.", "repo_id": repo_id });
-    let post_id = store.insert(namespace, "post", &post_doc, user2)?.id;
+    let post_id = store.insert(namespace, "post", &post_doc, user2)?;
     let post_item = store.get(namespace, "post", &post_id, user2)?;
     assert_eq!(post_item.body["title"], "Post by user2");
 
