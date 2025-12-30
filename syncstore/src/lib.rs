@@ -16,10 +16,6 @@ pub mod store;
 pub mod types;
 pub mod utils;
 
-// pub use crate::backend::Backend;
-// pub use crate::store::Store;
-// pub use crate::types::{Id, Meta};
-
 pub async fn init_service(store: Arc<store::Store>, config: &config::ServiceConfig) -> anyhow::Result<()> {
     utils::jwt::set_jwt_config(&config.jwt);
 

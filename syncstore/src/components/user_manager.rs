@@ -3,7 +3,7 @@ use std::{path::Path, sync::Arc};
 use crate::{
     backend::{Backend, SqliteBackend, sqlite::SqliteBackendBuilder},
     error::StoreResult,
-    types::{Meta, UserSchema},
+    types::UserSchema,
     utils::constant::{FRIENDS_TABLE, ROOT_OWNER, USER_TABLE},
 };
 
@@ -52,8 +52,7 @@ impl UserManager {
             "username": username,
             "password": password
         });
-        let meta = Meta::new(ROOT_OWNER.to_string(), Some(username.to_string()));
-        self.backend.insert(USER_TABLE, &user, meta)?;
+        self.backend.insert(USER_TABLE, &user, ROOT_OWNER.to_string())?;
         Ok(())
     }
 
@@ -73,25 +72,25 @@ impl UserManager {
         Ok(user_profile)
     }
 
-    pub fn update_user(&self, user_id: &String, user: &UserSchema) -> StoreResult<Meta> {
-        self.backend.update(USER_TABLE, user_id, &serde_json::to_value(user)?)
+    pub fn update_user(&self, user_id: &String, user: &UserSchema) -> StoreResult<()> {
+        self.backend.update(USER_TABLE, user_id, &serde_json::to_value(user)?)?;
+        Ok(())
     }
 
     pub fn get_inner_backend(&self) -> Arc<dyn Backend> {
         self.backend.clone()
     }
 
-    pub fn add_friend(&self, user_id: &String, friend_id: &String) -> StoreResult<Meta> {
+    pub fn add_friend(&self, user_id: &String, friend_id: &String) -> StoreResult<()> {
         let body = serde_json::json!({
             "friend_id": friend_id,
             "unique_key": format!("{}:{}", user_id, friend_id),
         });
-        let meta = Meta::new(user_id.to_string(), None);
-        let inserted_meta = self.backend.insert(FRIENDS_TABLE, &body, meta)?;
-        Ok(inserted_meta)
+        self.backend.insert(FRIENDS_TABLE, &body, user_id.to_string())?;
+        Ok(())
     }
 
-    pub fn list_friends(&self, user_id: &String) -> StoreResult<Vec<String>> {
+    pub fn list_friends(&self, user_id: &str) -> StoreResult<Vec<String>> {
         // todo better with pagination
         let items = self.backend.list_by_owner(FRIENDS_TABLE, user_id, None, 100)?;
         let friend_ids = items

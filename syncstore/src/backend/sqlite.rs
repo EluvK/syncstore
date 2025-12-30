@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::backend::Backend;
 use crate::error::{StoreError, StoreResult};
-use crate::types::{DataItem, DataItemDocument, Id, Meta};
+use crate::types::{DataItem, DataItemDocument, Id};
 
 // ?let's write some user define schema checker here for now, late move to separate file module.
 mod checker {
@@ -165,7 +165,8 @@ pub struct SqliteBackend {
 
     // every collection's parent collection info
     parent_ref: HashMap<String, checker::XParentIdMeta>,
-    unique_fields: HashMap<String, String>, // collection -> unique field
+    unique_fields: HashMap<String, String>,  // collection -> unique field
+    inspect_fields: HashMap<String, String>, // collection -> inspect field
 }
 
 impl SqliteBackend {
@@ -182,6 +183,7 @@ impl SqliteBackend {
             schema_validator: HashMap::new(),
             parent_ref: HashMap::new(),
             unique_fields: HashMap::new(),
+            inspect_fields: HashMap::new(),
         }
     }
 
@@ -275,6 +277,12 @@ impl SqliteBackend {
         {
             self.unique_fields.insert(collection.to_string(), xu.to_string());
         }
+        if let Some(xi) = schema.get("x-inspect").and_then(|v| v.as_str())
+            && !xi.is_empty()
+        {
+            // for future use
+            self.inspect_fields.insert(collection.to_string(), xi.to_string());
+        }
         if let Some(xpi) = schema
             .get("x-parent-id")
             .and_then(|v| serde_json::from_value::<checker::XParentIdMeta>(v.clone()).ok())
@@ -294,6 +302,7 @@ impl SqliteBackend {
                 updated_at TEXT NOT NULL,
                 owner TEXT NOT NULL,
                 uniq TEXT UNIQUE,
+                inspect TEXT,
                 parent_id TEXT
             );",
             table
@@ -307,6 +316,19 @@ impl SqliteBackend {
     fn fetch_unique_field(&self, collection: &str, body: &Value) -> StoreResult<Option<String>> {
         // todo future support nested field like "a.b.c"
         if let Some(field) = self.unique_fields.get(collection)
+            && let Some(v) = body.get(field)
+        {
+            return match v.as_str() {
+                Some(s) => Ok(Some(s.to_string())),
+                None => Ok(Some(serde_json::to_string(v)?)),
+            };
+        }
+        Ok(None)
+    }
+
+    fn fetch_inspect_field(&self, collection: &str, body: &Value) -> StoreResult<Option<String>> {
+        // todo future support nested field like "a.b.c"
+        if let Some(field) = self.inspect_fields.get(collection)
             && let Some(v) = body.get(field)
         {
             return match v.as_str() {
@@ -353,35 +375,39 @@ fn sanitize_table_name(name: &str) -> String {
 }
 
 impl Backend for SqliteBackend {
-    fn insert(&self, collection: &str, body: &Value, meta: Meta) -> StoreResult<Meta> {
-        // validate data, ensure collection table exists and schema validated
+    fn import(
+        &self,
+        collection: &str,
+        body: &Value,
+        owner: String,
+        id: String,
+        created_at: chrono::DateTime<chrono::Utc>,
+        updated_at: chrono::DateTime<chrono::Utc>,
+    ) -> StoreResult<String> {
         self.validate_against_schema(collection, body)?;
         let body_text = serde_json::to_string(body)?;
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
 
-        let mut meta = meta;
-        if meta.unique.is_none() {
-            meta.unique = self.fetch_unique_field(collection, body)?;
-        }
-        if meta.parent_id.is_none() {
-            meta.parent_id = self.fetch_parent_id(collection, body)?;
-        }
+        let unique = self.fetch_unique_field(collection, body)?;
+        let inspect = self.fetch_inspect_field(collection, body)?;
+        let parent_id = self.fetch_parent_id(collection, body)?;
 
         let sql = format!(
-            "INSERT INTO {} (id, body, created_at, updated_at, owner, uniq, parent_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO {} (id, body, created_at, updated_at, owner, uniq, inspect, parent_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             table
         );
         conn.execute(
             &sql,
             params![
-                meta.id,
+                id,
                 body_text,
-                meta.created_at.to_rfc3339(),
-                meta.updated_at.to_rfc3339(),
-                meta.owner,
-                meta.unique,
-                meta.parent_id
+                created_at.to_rfc3339(),
+                updated_at.to_rfc3339(),
+                owner,
+                unique,
+                inspect,
+                parent_id
             ],
         )
         .map_err(|e| match &e {
@@ -396,21 +422,29 @@ impl Backend for SqliteBackend {
             }
             _ => StoreError::Backend(e.to_string()),
         })?;
-        Ok(meta)
+        Ok(id)
+    }
+
+    fn insert(&self, collection: &str, body: &Value, owner: String) -> StoreResult<String> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now();
+        let created_at: chrono::DateTime<chrono::Utc> = now;
+        let updated_at: chrono::DateTime<chrono::Utc> = now;
+        self.import(collection, body, owner, id, created_at, updated_at)
     }
 
     fn list_by_owner(
         &self,
         collection: &str,
         owner: &str,
-        marker: Option<&str>,
+        marker: Option<String>,
         limit: usize,
     ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
         let conn = self.get_conn()?;
         let table = sanitize_table_name(collection);
         // use a single query: if marker is NULL the WHERE clause is ignored
         let sql = format!(
-            "SELECT id, body, created_at, updated_at, owner, uniq, parent_id \
+            "SELECT id, body, created_at, updated_at, owner, uniq, inspect, parent_id \
              FROM {} \
              WHERE (owner = ?1) AND (?2 IS NULL OR id >= ?2) \
              ORDER BY id ASC \
@@ -436,7 +470,8 @@ impl Backend for SqliteBackend {
                     updated_at: row.get(3)?,
                     owner: row.get(4)?,
                     unique: row.get(5)?,
-                    parent_id: row.get(6)?,
+                    inspect: row.get(6)?,
+                    parent_id: row.get(7)?,
                 }
                 .try_into()?,
             );
@@ -448,14 +483,14 @@ impl Backend for SqliteBackend {
         &self,
         collection: &str,
         parent_id: &str,
-        marker: Option<&str>,
+        marker: Option<String>,
         limit: usize,
     ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
         let conn = self.get_conn()?;
         let table = sanitize_table_name(collection);
         // use a single query: if marker is NULL the WHERE clause is ignored
         let sql = format!(
-            "SELECT id, body, created_at, updated_at, owner, uniq, parent_id \
+            "SELECT id, body, created_at, updated_at, owner, uniq, inspect, parent_id \
              FROM {} \
              WHERE (parent_id = ?1) AND (?2 IS NULL OR id >= ?2) \
              ORDER BY id ASC \
@@ -482,7 +517,54 @@ impl Backend for SqliteBackend {
                     updated_at: row.get(3)?,
                     owner: row.get(4)?,
                     unique: row.get(5)?,
-                    parent_id: row.get(6)?,
+                    inspect: row.get(6)?,
+                    parent_id: row.get(7)?,
+                }
+                .try_into()?,
+            );
+        }
+        Ok((items, next_marker))
+    }
+
+    fn list_by_inspect(
+        &self,
+        collection: &str,
+        inspect: &str,
+        marker: Option<String>,
+        limit: usize,
+    ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
+        let conn = self.get_conn()?;
+        let table = sanitize_table_name(collection);
+        // use a single query: if marker is NULL the WHERE clause is ignored
+        let sql = format!(
+            "SELECT id, body, created_at, updated_at, owner, uniq, inspect, parent_id \
+             FROM {} \
+             WHERE (inspect = ?1) AND (?2 IS NULL OR id >= ?2) \
+             ORDER BY id ASC \
+             LIMIT ?3",
+            table
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query(params![inspect, marker, limit as i64 + 1])?;
+        let mut items = Vec::new();
+        let mut next_marker: Option<String> = None;
+        while let Some(row) = rows.next()? {
+            let id = row.get::<_, String>(0)?;
+            if items.len() == limit {
+                // we have one more item, set next_marker
+                next_marker = Some(id);
+                break;
+            }
+            items.push(
+                DataItemDocument {
+                    id: id.clone(),
+                    body: row.get(1)?,
+                    created_at: row.get(2)?,
+                    updated_at: row.get(3)?,
+                    owner: row.get(4)?,
+                    unique: row.get(5)?,
+                    inspect: row.get(6)?,
+                    parent_id: row.get(7)?,
                 }
                 .try_into()?,
             );
@@ -494,7 +576,7 @@ impl Backend for SqliteBackend {
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
         let sql = format!(
-            "SELECT body, created_at, updated_at, owner, uniq, parent_id FROM {} WHERE id = ?1",
+            "SELECT body, created_at, updated_at, owner, uniq, inspect, parent_id FROM {} WHERE id = ?1",
             table
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -507,7 +589,8 @@ impl Backend for SqliteBackend {
                     updated_at: r.get(2)?,
                     owner: r.get(3)?,
                     unique: r.get(4)?,
-                    parent_id: r.get(5)?,
+                    inspect: r.get(5)?,
+                    parent_id: r.get(6)?,
                 })
             })
             .optional()?
@@ -525,7 +608,7 @@ impl Backend for SqliteBackend {
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
         let sql = format!(
-            "SELECT id, body, created_at, updated_at, owner, parent_id FROM {} WHERE uniq = ?1",
+            "SELECT id, body, created_at, updated_at, owner, inspect, parent_id FROM {} WHERE uniq = ?1",
             table
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -538,7 +621,8 @@ impl Backend for SqliteBackend {
                     updated_at: r.get(3)?,
                     owner: r.get(4)?,
                     unique: Some(unique.to_string()),
-                    parent_id: r.get(5)?,
+                    inspect: r.get(5)?,
+                    parent_id: r.get(6)?,
                 })
             })
             .optional()?
@@ -546,7 +630,7 @@ impl Backend for SqliteBackend {
         data.try_into()
     }
 
-    fn update(&self, collection: &str, id: &Id, body: &Value) -> StoreResult<Meta> {
+    fn update(&self, collection: &str, id: &Id, body: &Value) -> StoreResult<DataItem> {
         // validate data, ensure collection table exists and schema validated
         self.validate_against_schema(collection, body)?;
         let body_text = serde_json::to_string(body)?;
@@ -554,19 +638,20 @@ impl Backend for SqliteBackend {
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
         let unique = self.fetch_unique_field(collection, body)?;
+        let inspect = self.fetch_inspect_field(collection, body)?;
         let parent_id = self.fetch_parent_id(collection, body)?;
         let sql = format!(
-            "UPDATE {} SET body = ?1, updated_at = ?2, uniq = ?3, parent_id = ?4 WHERE id = ?5",
+            "UPDATE {} SET body = ?1, updated_at = ?2, uniq = ?3, inspect = ?4, parent_id = ?5 WHERE id = ?6",
             table
         );
-        let n = conn.execute(&sql, params![body_text, updated_at, unique, parent_id, id])?;
+        let n = conn.execute(&sql, params![body_text, updated_at, unique, inspect, parent_id, id])?;
         if n == 0 {
             return Err(StoreError::NotFound("Update Data".to_string()));
         }
 
-        // read back meta
+        // read back
         let item = self.get(collection, id)?;
-        Ok(item.into())
+        Ok(item)
     }
 
     fn delete(&self, collection: &str, id: &Id) -> StoreResult<()> {
@@ -577,6 +662,25 @@ impl Backend for SqliteBackend {
         if n == 0 {
             return Err(StoreError::NotFound("Delete Data".to_string()));
         }
+        Ok(())
+    }
+
+    fn batch_delete(&self, collection: &str, ids: &[Id]) -> StoreResult<()> {
+        let table = sanitize_table_name(collection);
+        let mut conn = self.get_conn()?;
+        let tx = conn.transaction()?;
+        let sql = format!("DELETE FROM {} WHERE id = ?1", table);
+        {
+            let mut stmt = tx.prepare(&sql)?;
+            for id in ids {
+                let n = stmt.execute(params![id])?;
+                if n == 0 {
+                    return Err(StoreError::NotFound(format!("Delete Data id={}", id)));
+                }
+            }
+            // drop stmt before commit
+        }
+        tx.commit()?;
         Ok(())
     }
 }

@@ -63,12 +63,12 @@ async fn list_data(
             namespace.as_str(),
             collection.as_str(),
             parent_id,
-            marker.as_deref(),
+            marker.clone(),
             limit,
             user,
         )?
     } else {
-        store.list_by_owner(namespace.as_str(), collection.as_str(), marker.as_deref(), limit, user)?
+        store.list_by_owner(namespace.as_str(), collection.as_str(), marker.clone(), limit, user)?
     };
     Ok(ListDataResponse {
         page_info: PageInfo {
@@ -135,8 +135,8 @@ async fn create_data(
 ) -> ServiceResult<String> {
     let user = depot.get::<String>("user_id")?;
     let store = depot.obtain::<Arc<Store>>()?;
-    let item = store.insert(&namespace, &collection, &req.0, user)?;
-    Ok(item.id)
+    let id = store.insert(&namespace, &collection, &req.0, user)?;
+    Ok(id)
 }
 
 /// Update an existing data item

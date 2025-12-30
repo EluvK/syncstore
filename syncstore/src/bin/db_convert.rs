@@ -7,7 +7,6 @@ use syncstore::{
     backend::Backend,
     components::DataSchemasBuilder,
     error::StoreError,
-    types::Meta,
     utils::constant::{ROOT_OWNER, USER_TABLE},
 };
 
@@ -83,18 +82,10 @@ fn main() -> anyhow::Result<()> {
             });
 
             println!("Imported user: {}", &id);
-            let meta = Meta {
-                id,
-                created_at,
-                updated_at,
-                owner: ROOT_OWNER.to_string(),
-                unique: Some(username.clone()),
-                parent_id: None,
-            };
 
             let user_backend = store.get_user_backend();
-            match user_backend.insert(USER_TABLE, &body, meta) {
-                Ok(_meta) => (),
+            match user_backend.import(USER_TABLE, &body, ROOT_OWNER.to_string(), id, created_at, updated_at) {
+                Ok(_id) => (),
                 Err(ref e @ StoreError::Validation(ref err)) => {
                     if err.clone().to_ascii_lowercase().contains("unique constraint failed") {
                         println!(" [SKIP] User {} already exists, skipping.", username);
@@ -167,29 +158,27 @@ fn main() -> anyhow::Result<()> {
                 "Imported data item: {} into collection: {}",
                 &id, &mapping.target_collection
             );
-            let meta = Meta {
-                id,
-                created_at,
-                updated_at,
-                owner,
-                // it's ok to be None that the insert will make up this fields if exists.
-                unique: None,
-                parent_id: None,
-            };
 
             let data_backend = store.get_data_backend(&config.general.namespace)?;
-            match data_backend.insert(&mapping.target_collection, &body, meta.clone()) {
-                Ok(_meta) => (),
+            match data_backend.import(
+                &mapping.target_collection,
+                &body,
+                owner.clone(),
+                id.clone(),
+                created_at,
+                updated_at,
+            ) {
+                Ok(_) => (),
                 Err(ref e @ StoreError::Validation(ref err)) => {
                     if err.clone().to_ascii_lowercase().contains("unique constraint failed") {
                         println!(
                             " [SKIP] Data item {} in collection {} already exists, skipping.",
-                            meta.id, &mapping.target_collection
+                            id, &mapping.target_collection
                         );
                     } else {
                         return Err(anyhow::anyhow!(
                             "Failed to insert data item {} into collection {}: {}",
-                            meta.id,
+                            id,
                             &mapping.target_collection,
                             e
                         ));
@@ -198,7 +187,7 @@ fn main() -> anyhow::Result<()> {
                 Err(e) => {
                     return Err(anyhow::anyhow!(
                         "Failed to insert data item {} into collection {}: {}",
-                        meta.id,
+                        id,
                         &mapping.target_collection,
                         e
                     ));

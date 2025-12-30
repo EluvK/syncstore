@@ -5,7 +5,7 @@ use serde_json::Value;
 use crate::backend::Backend;
 use crate::components::{AclManager, DataManager, DataManagerBuilder, DataSchemas, UserManager};
 use crate::error::{StoreError, StoreResult};
-use crate::types::{ACLMask, AccessControl, DataItem, Id, Meta, UserSchema};
+use crate::types::{ACLMask, AccessControl, DataItem, Id, UserSchema};
 
 pub struct Store {
     data_manager: Arc<DataManager>,
@@ -50,7 +50,7 @@ impl Store {
         self.user_manager.get_user(user_id)
     }
 
-    pub fn update_user(&self, user_id: &String, user_schema: &UserSchema) -> StoreResult<Meta> {
+    pub fn update_user(&self, user_id: &String, user_schema: &UserSchema) -> StoreResult<()> {
         self.user_manager.update_user(user_id, user_schema)
     }
 
@@ -62,7 +62,7 @@ impl Store {
         self.user_manager.get_inner_backend()
     }
 
-    pub fn list_friends(&self, user_id: &String) -> StoreResult<Vec<(String, UserSchema)>> {
+    pub fn list_friends(&self, user_id: &str) -> StoreResult<Vec<(String, UserSchema)>> {
         let friend_ids = self.user_manager.list_friends(user_id)?;
         let mut friends = Vec::new();
         for friend_id in friend_ids {
@@ -83,7 +83,7 @@ impl Store {
 impl Store {
     // -- CRUD operations below --
     /// Insert a document body. Returns meta including generated id.
-    pub fn insert(&self, namespace: &str, collection: &str, body: &Value, user: &str) -> StoreResult<Meta> {
+    pub fn insert(&self, namespace: &str, collection: &str, body: &Value, user: &str) -> StoreResult<String> {
         let backend = self.data_manager.backend_for(namespace)?;
         // check permission on parent collection if exist.
         // else the collection is root level, allow insert for anyone.
@@ -100,15 +100,14 @@ impl Store {
                 return Err(StoreError::PermissionDenied);
             }
         }
-        let meta = Meta::new(user.to_string(), None);
-        backend.insert(collection, body, meta)
+        backend.insert(collection, body, user.to_string())
     }
 
     pub fn list_by_owner(
         &self,
         namespace: &str,
         collection: &str,
-        marker: Option<&str>,
+        marker: Option<String>,
         limit: usize,
         user: &str,
     ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
@@ -122,7 +121,7 @@ impl Store {
         namespace: &str,
         collection: &str,
         parent_id: &str,
-        marker: Option<&str>,
+        marker: Option<String>,
         limit: usize,
         user: &str,
     ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
@@ -152,7 +151,14 @@ impl Store {
         Ok(data)
     }
 
-    pub fn update(&self, namespace: &str, collection: &str, id: &Id, body: &Value, user: &str) -> StoreResult<Meta> {
+    pub fn update(
+        &self,
+        namespace: &str,
+        collection: &str,
+        id: &Id,
+        body: &Value,
+        user: &str,
+    ) -> StoreResult<DataItem> {
         let backend = self.data_manager.backend_for(namespace)?;
         let data = backend.get(collection, id)?;
         // check permission
@@ -244,21 +250,7 @@ impl Store {
         if data.owner != user {
             return Err(StoreError::PermissionDenied);
         }
-        match self.acl_manager.get_acl(&acl.data_id) {
-            Ok(_c) => {
-                // existing, update
-                self.acl_manager.update_acl(acl)?;
-                return Ok(());
-            }
-            Err(StoreError::NotFound(_e)) => {
-                // not found, create
-                self.acl_manager.create_acl(acl, user)?;
-                return Ok(());
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        }
+        self.acl_manager.update_acl(acl, user)
     }
 
     pub fn delete_acl(&self, (namespace, collection): (&str, &str), data_id: &str, user: &str) -> StoreResult<()> {
@@ -268,7 +260,7 @@ impl Store {
         if data.owner != user {
             return Err(StoreError::PermissionDenied);
         }
-        self.acl_manager.delete_acl_by_data_id(data_id)?;
+        self.acl_manager.delete_acls_by_data_id(data_id)?;
         Ok(())
     }
 }

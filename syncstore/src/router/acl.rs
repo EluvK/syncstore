@@ -42,7 +42,7 @@ async fn update_acl(
     id: PathParam<String>,
     req: JsonBody<CreateAclRequest>,
     depot: &mut Depot,
-) -> ServiceResult<()> {
+) -> ServiceResult<String> {
     let store = depot.obtain::<Arc<Store>>()?;
     let user = depot.get::<String>("user_id")?;
     let acl = AccessControl {
@@ -52,7 +52,7 @@ async fn update_acl(
     
     store.update_acl((namespace.as_str(), collection.as_str()), acl, user)?;
     tracing::info!("update_acl for data {}", id.as_str());
-    Ok(())
+    Ok("success".to_string())
 }
 
 #[derive(Deserialize, ToSchema)]
