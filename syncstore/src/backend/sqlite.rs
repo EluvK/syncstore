@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -165,8 +165,8 @@ pub struct SqliteBackend {
 
     // every collection's parent collection info
     parent_ref: HashMap<String, checker::XParentIdMeta>,
-    unique_fields: HashMap<String, String>,  // collection -> unique field
-    inspect_fields: HashMap<String, String>, // collection -> inspect field
+    unique_fields: HashMap<String, String>,           // collection -> unique field
+    inspect_fields: HashMap<String, HashSet<String>>, // collection -> inspect fields
 }
 
 impl SqliteBackend {
@@ -277,11 +277,13 @@ impl SqliteBackend {
         {
             self.unique_fields.insert(collection.to_string(), xu.to_string());
         }
-        if let Some(xi) = schema.get("x-inspect").and_then(|v| v.as_str())
+        if let Some(xi) = schema.get("x-inspect").and_then(|v| v.as_array())
             && !xi.is_empty()
         {
-            // for future use
-            self.inspect_fields.insert(collection.to_string(), xi.to_string());
+            self.inspect_fields.insert(
+                collection.to_string(),
+                xi.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect(),
+            );
         }
         if let Some(xpi) = schema
             .get("x-parent-id")
@@ -326,15 +328,17 @@ impl SqliteBackend {
         Ok(None)
     }
 
-    fn fetch_inspect_field(&self, collection: &str, body: &Value) -> StoreResult<Option<String>> {
-        // todo future support nested field like "a.b.c"
-        if let Some(field) = self.inspect_fields.get(collection)
-            && let Some(v) = body.get(field)
+    fn fetch_inspect_field(&self, collection: &str, body: &Value) -> StoreResult<Option<Value>> {
+        if let Some(fields) = self.inspect_fields.get(collection)
+            && fields.iter().all(|field| body.get(field).is_some())
         {
-            return match v.as_str() {
-                Some(s) => Ok(Some(s.to_string())),
-                None => Ok(Some(serde_json::to_string(v)?)),
-            };
+            let mut map = serde_json::Map::new();
+            for field in fields {
+                if let Some(v) = body.get(field) {
+                    map.insert(field.clone(), v.clone());
+                }
+            }
+            return Ok(Some(Value::Object(map)));
         }
         Ok(None)
     }
@@ -390,7 +394,9 @@ impl Backend for SqliteBackend {
         let conn = self.get_conn()?;
 
         let unique = self.fetch_unique_field(collection, body)?;
-        let inspect = self.fetch_inspect_field(collection, body)?;
+        let inspect = self
+            .fetch_inspect_field(collection, body)?
+            .and_then(|v| serde_json::to_string(&v).ok());
         let parent_id = self.fetch_parent_id(collection, body)?;
 
         let sql = format!(
@@ -529,6 +535,7 @@ impl Backend for SqliteBackend {
     fn list_by_inspect(
         &self,
         collection: &str,
+        inspect_field: &str,
         inspect: &str,
         marker: Option<String>,
         limit: usize,
@@ -539,13 +546,14 @@ impl Backend for SqliteBackend {
         let sql = format!(
             "SELECT id, body, created_at, updated_at, owner, uniq, inspect, parent_id \
              FROM {} \
-             WHERE (inspect = ?1) AND (?2 IS NULL OR id >= ?2) \
+             WHERE (inspect LIKE ?1) AND (?2 IS NULL OR id >= ?2) \
              ORDER BY id ASC \
              LIMIT ?3",
             table
         );
         let mut stmt = conn.prepare(&sql)?;
-        let mut rows = stmt.query(params![inspect, marker, limit as i64 + 1])?;
+        let inspect_pattern = format!("%\"{}\":%{}%", inspect_field, inspect);
+        let mut rows = stmt.query(params![inspect_pattern, marker, limit as i64 + 1])?;
         let mut items = Vec::new();
         let mut next_marker: Option<String> = None;
         while let Some(row) = rows.next()? {
@@ -638,7 +646,9 @@ impl Backend for SqliteBackend {
         let table = sanitize_table_name(collection);
         let conn = self.get_conn()?;
         let unique = self.fetch_unique_field(collection, body)?;
-        let inspect = self.fetch_inspect_field(collection, body)?;
+        let inspect = self
+            .fetch_inspect_field(collection, body)?
+            .and_then(|v| serde_json::to_string(&v).ok());
         let parent_id = self.fetch_parent_id(collection, body)?;
         let sql = format!(
             "UPDATE {} SET body = ?1, updated_at = ?2, uniq = ?3, inspect = ?4, parent_id = ?5 WHERE id = ?6",

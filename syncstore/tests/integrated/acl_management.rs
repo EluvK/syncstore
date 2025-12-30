@@ -42,11 +42,17 @@ fn acl_basic_crud() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(item.body["description"], "Updated by user2 with ACL");
 
     // user1 gets the ACL
-    let fetched_acl = store.get_acl((namespace, "repo"), &repo_id, user1)?;
+    let fetched_acl = store.get_data_acl((namespace, "repo"), &repo_id, user1)?;
     assert_eq!(fetched_acl.data_id, repo_id);
     assert_eq!(fetched_acl.permissions.len(), 1);
     assert_eq!(fetched_acl.permissions[0].user, *user2);
     assert_eq!(fetched_acl.permissions[0].access_level, AccessLevel::Write);
+
+    let user_acls = store.get_user_acls(user1)?;
+    assert_eq!(user_acls.len(), 0);
+    let user_acls = store.get_user_acls(user2)?;
+    assert_eq!(user_acls.len(), 1);
+    assert_eq!(user_acls[0].data_id, repo_id);
 
     // user1 updates the ACL to give user2 only read access
     let updated_acl = gen_acl(&repo_id, user2, AccessLevel::Read);

@@ -41,6 +41,7 @@ pub trait Backend: Send + Sync {
     fn list_by_inspect(
         &self,
         collection: &str,
+        inspect_field: &str,
         inspect: &str,
         marker: Option<String>,
         limit: usize,

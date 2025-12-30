@@ -195,7 +195,7 @@ impl Store {
             return Ok(true);
         }
         // check ACL
-        if let Ok(acl) = self.acl_manager.get_acl(&data.id) {
+        if let Ok(acl) = self.acl_manager.get_data_acl(&data.id) {
             for perm in acl.permissions {
                 let acl_mask: ACLMask = perm.access_level.clone().into();
                 if perm.user == user && acl_mask.contains(needed_mask) {
@@ -221,7 +221,7 @@ impl Store {
 
 /// ACL related operations
 impl Store {
-    pub fn get_acl(
+    pub fn get_data_acl(
         &self,
         (namespace, collection): (&str, &str),
         data_id: &str,
@@ -231,7 +231,7 @@ impl Store {
         if data.owner != user {
             return Err(StoreError::PermissionDenied);
         }
-        match self.acl_manager.get_acl(data_id) {
+        match self.acl_manager.get_data_acl(data_id) {
             Ok(acl) => Ok(acl),
             Err(StoreError::NotFound(_)) => {
                 // return empty ACL if not found
@@ -242,6 +242,11 @@ impl Store {
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// query acls the user has access to
+    pub fn get_user_acls(&self, user: &str) -> StoreResult<Vec<AccessControl>> {
+        self.acl_manager.get_user_acls(user)
     }
 
     pub fn update_acl(&self, (namespace, collection): (&str, &str), acl: AccessControl, user: &str) -> StoreResult<()> {

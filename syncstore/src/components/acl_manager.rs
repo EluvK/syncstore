@@ -16,7 +16,10 @@ struct PermissionSchema {
     pub user_id: String,
     pub access_level: AccessLevel,
 }
-
+enum InspectAclField<'a> {
+    DataId(&'a str),
+    UserId(&'a str),
+}
 impl AclManager {
     const ACL_TABLE: &str = "acls";
 
@@ -36,7 +39,7 @@ impl AclManager {
                 }
             },
             "required": ["data_id", "user_id", "access_level"],
-            "x-inspect": "data_id"
+            "x-inspect": ["data_id", "user_id"]
         });
 
         let backend = SqliteBackendBuilder::file(path)
@@ -48,11 +51,20 @@ impl AclManager {
         })
     }
 
-    fn list_all_acls(&self, data_id: &str) -> StoreResult<Vec<DataItem>> {
+    fn list_all_acls(&self, field: InspectAclField) -> StoreResult<Vec<DataItem>> {
         let mut marker = None;
         let mut all_items = Vec::new();
         loop {
-            let (items, next_marker) = self.backend.list_by_inspect(Self::ACL_TABLE, data_id, marker, 100)?;
+            let (items, next_marker) = match field {
+                InspectAclField::DataId(data_id) => {
+                    self.backend
+                        .list_by_inspect(Self::ACL_TABLE, "data_id", data_id, marker, 100)?
+                }
+                InspectAclField::UserId(user_id) => {
+                    self.backend
+                        .list_by_inspect(Self::ACL_TABLE, "user_id", user_id, marker, 100)?
+                }
+            };
             all_items.extend(items);
             match next_marker {
                 Some(m) => marker = Some(m),
@@ -62,9 +74,26 @@ impl AclManager {
         Ok(all_items)
     }
 
-    pub fn get_acl(&self, data_id: &str) -> StoreResult<AccessControl> {
-        let items = self.list_all_acls(data_id)?;
+    pub fn get_user_acls(&self, user_id: &str) -> StoreResult<Vec<AccessControl>> {
+        let items = self.list_all_acls(InspectAclField::UserId(user_id))?;
+        let mut acl_map: HashMap<String, Vec<Permission>> = HashMap::new();
+        for item in items {
+            let schema = serde_json::from_value::<PermissionSchema>(item.body)?;
+            let permission = Permission {
+                user: schema.user_id,
+                access_level: schema.access_level,
+            };
+            acl_map.entry(schema.data_id).or_default().push(permission);
+        }
+        let acls = acl_map
+            .into_iter()
+            .map(|(data_id, permissions)| AccessControl { data_id, permissions })
+            .collect();
+        Ok(acls)
+    }
 
+    pub fn get_data_acl(&self, data_id: &str) -> StoreResult<AccessControl> {
+        let items = self.list_all_acls(InspectAclField::DataId(data_id))?;
         let permissions = items
             .into_iter()
             .map(|item| {
@@ -75,7 +104,6 @@ impl AclManager {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
-
         Ok(AccessControl {
             data_id: data_id.to_owned(),
             permissions,
@@ -97,18 +125,15 @@ impl AclManager {
                 )
             })
             .collect();
-
-        let existing_items = self.list_all_acls(&acl.data_id)?;
+        let existing_items = self.list_all_acls(InspectAclField::DataId(&acl.data_id))?;
 
         let mut deleted_ids = Vec::new();
         let mut to_update = Vec::new();
         for item in existing_items {
             let existing: PermissionSchema = serde_json::from_value(item.body.clone())?;
-
-            if let Some(new_p) = new_perms_map.remove(&existing.user_id) {
-                to_update.push((item.id, new_p));
-            } else {
-                deleted_ids.push(item.id);
+            match new_perms_map.remove(&existing.user_id) {
+                Some(new_p) => to_update.push((item.id, new_p)),
+                None => deleted_ids.push(item.id),
             }
         }
         for (_, p) in new_perms_map {
@@ -126,7 +151,11 @@ impl AclManager {
     }
 
     pub fn delete_acls_by_data_id(&self, data_id: &str) -> StoreResult<()> {
-        let ids: Vec<String> = self.list_all_acls(data_id)?.into_iter().map(|item| item.id).collect();
+        let ids = self
+            .list_all_acls(InspectAclField::DataId(data_id))?
+            .into_iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>();
         if !ids.is_empty() {
             self.backend.batch_delete(Self::ACL_TABLE, &ids)?;
         }
