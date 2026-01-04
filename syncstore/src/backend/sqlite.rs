@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 
 use r2d2::{Pool, PooledConnection};
@@ -712,15 +713,14 @@ impl Backend for SqliteBackend {
 impl SqliteBackend {
     pub fn get_data_permissions(&self, data_collection: &str, data_id: &str) -> StoreResult<Vec<PermissionSchema>> {
         let conn = self.get_conn()?;
-        let sql = format!("SELECT user_id, permission FROM __acls WHERE data_collection = ?1 AND data_id = ?2",);
+        let sql = "SELECT user_id, permission FROM __acls WHERE data_collection = ?1 AND data_id = ?2".to_string();
         let mut stmt = conn.prepare(&sql)?;
         let mut rows = stmt.query(params![data_collection, data_id])?;
         let mut permissions = Vec::new();
         while let Some(row) = rows.next()? {
             let user_id: String = row.get(0)?;
             let permission_str: String = row.get(1)?;
-            let access_level = AccessLevel::from_str(&permission_str)
-                .ok_or_else(|| StoreError::Validation(format!("invalid permission string: {}", permission_str)))?;
+            let access_level = AccessLevel::from_str(&permission_str)?;
             permissions.push(PermissionSchema {
                 data_id: data_id.to_string(),
                 user_id,
@@ -732,15 +732,14 @@ impl SqliteBackend {
 
     pub fn get_user_permissions(&self, data_collection: &str, user_id: &str) -> StoreResult<Vec<PermissionSchema>> {
         let conn = self.get_conn()?;
-        let sql = format!("SELECT data_id, permission FROM __acls WHERE data_collection = ?1 AND user_id = ?2",);
+        let sql = "SELECT data_id, permission FROM __acls WHERE data_collection = ?1 AND user_id = ?2".to_string();
         let mut stmt = conn.prepare(&sql)?;
         let mut rows = stmt.query(params![data_collection, user_id])?;
         let mut permissions = Vec::new();
         while let Some(row) = rows.next()? {
             let data_id: String = row.get(0)?;
             let permission_str: String = row.get(1)?;
-            let access_level = AccessLevel::from_str(&permission_str)
-                .ok_or_else(|| StoreError::Validation(format!("invalid permission string: {}", permission_str)))?;
+            let access_level = AccessLevel::from_str(&permission_str)?;
             permissions.push(PermissionSchema {
                 data_id,
                 user_id: user_id.to_string(),
@@ -752,7 +751,7 @@ impl SqliteBackend {
 
     pub fn delete_acls_by_data_id(&self, data_collection: &str, data_id: &str) -> StoreResult<()> {
         let conn = self.get_conn()?;
-        let sql = format!("DELETE FROM __acls WHERE data_collection = ?1 AND data_id = ?2",);
+        let sql = "DELETE FROM __acls WHERE data_collection = ?1 AND data_id = ?2".to_string();
         conn.execute(&sql, params![data_collection, data_id])?;
         Ok(())
     }
@@ -784,14 +783,12 @@ impl SqliteBackend {
         let mut conn = self.get_conn()?;
         let tx = conn.transaction()?;
         for user_id in deleted_ids {
-            let sql = format!("DELETE FROM __acls WHERE data_collection = ?1 AND data_id = ?2 AND user_id = ?3",);
+            let sql = "DELETE FROM __acls WHERE data_collection = ?1 AND data_id = ?2 AND user_id = ?3".to_string();
             tx.execute(&sql, params![data_collection, data_id, user_id])?;
         }
         for p in to_update_permissions {
             let permission_str = p.access_level.to_string();
-            let sql = format!(
-                "UPDATE __acls SET permission = ?1, updated_at = ?2 WHERE data_collection = ?3 AND data_id = ?4 AND user_id = ?5",
-            );
+            let sql = "UPDATE __acls SET permission = ?1, updated_at = ?2 WHERE data_collection = ?3 AND data_id = ?4 AND user_id = ?5".to_string();
             tx.execute(
                 &sql,
                 params![
@@ -806,10 +803,8 @@ impl SqliteBackend {
         for (_user_id, p) in new_permissions {
             let permission_str = p.access_level.to_string();
             let now = chrono::Utc::now();
-            let sql = format!(
-                "INSERT INTO __acls (id, data_collection, data_id, user_id, permission, created_at, updated_at, owner) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            );
+            let sql = "INSERT INTO __acls (id, data_collection, data_id, user_id, permission, created_at, updated_at, owner) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)".to_string();
             let acl_id = uuid::Uuid::new_v4().to_string();
             tx.execute(
                 &sql,

@@ -3,14 +3,13 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::backend::Backend;
-use crate::components::{AclManager, DataManager, DataManagerBuilder, DataSchemas, UserManager};
+use crate::components::{DataManager, DataManagerBuilder, DataSchemas, UserManager};
 use crate::error::{StoreError, StoreResult};
-use crate::types::{ACLMask, AccessControl, DataItem, Id, UserSchema};
+use crate::types::{ACLMask, AccessControl, DataItem, Id, Permission, PermissionSchema, UserSchema};
 
 pub struct Store {
     data_manager: Arc<DataManager>,
     user_manager: Arc<UserManager>,
-    acl_manager: Arc<AclManager>,
 }
 
 impl Store {
@@ -32,11 +31,10 @@ impl Store {
         }
         let data_manager = Arc::new(data_manager.build());
         let user_manager = Arc::new(UserManager::new(&inner_path)?);
-        let acl_manager = Arc::new(AclManager::new(&inner_path)?);
+
         Ok(Arc::new(Self {
             data_manager,
             user_manager,
-            acl_manager,
         }))
     }
 }
@@ -195,7 +193,7 @@ impl Store {
             return Ok(true);
         }
         // check ACL
-        if let Ok(acl) = self.acl_manager.get_data_acl(&data.id) {
+        if let Ok(acl) = self.root_get_data_acl(namespace, collection, &data.id) {
             for perm in acl.permissions {
                 let acl_mask: ACLMask = perm.access_level.clone().into();
                 if perm.user == user && acl_mask.contains(needed_mask) {
@@ -221,6 +219,22 @@ impl Store {
 
 /// ACL related operations
 impl Store {
+    // get data acl without permission check
+    fn root_get_data_acl(&self, namespace: &str, collection: &str, data_id: &str) -> StoreResult<AccessControl> {
+        let backend = self.data_manager.backend_for(namespace)?;
+        let permissions = backend.get_data_permissions(collection, data_id)?;
+        Ok(AccessControl {
+            data_id: data_id.to_string(),
+            permissions: permissions
+                .into_iter()
+                .map(|schema| Permission {
+                    user: schema.user_id,
+                    access_level: schema.access_level,
+                })
+                .collect(),
+        })
+    }
+
     pub fn get_data_acl(
         &self,
         (namespace, collection): (&str, &str),
@@ -231,22 +245,40 @@ impl Store {
         if data.owner != user {
             return Err(StoreError::PermissionDenied);
         }
-        match self.acl_manager.get_data_acl(data_id) {
-            Ok(acl) => Ok(acl),
-            Err(StoreError::NotFound(_)) => {
-                // return empty ACL if not found
-                Ok(AccessControl {
-                    data_id: data_id.to_string(),
-                    permissions: Vec::new(),
+        let backend = self.data_manager.backend_for(namespace)?;
+        let permissions = backend.get_data_permissions(collection, data_id)?;
+        Ok(AccessControl {
+            data_id: data_id.to_string(),
+            permissions: permissions
+                .into_iter()
+                .map(|schema| Permission {
+                    user: schema.user_id,
+                    access_level: schema.access_level,
                 })
-            }
-            Err(e) => Err(e),
-        }
+                .collect(),
+        })
     }
 
     /// query acls the user has access to
-    pub fn get_user_acls(&self, user: &str) -> StoreResult<Vec<AccessControl>> {
-        self.acl_manager.get_user_acls(user)
+    pub fn get_user_acls(&self, (namespace, collection): (&str, &str), user: &str) -> StoreResult<Vec<AccessControl>> {
+        let backend = self.data_manager.backend_for(namespace)?;
+        let permissions = backend.get_user_permissions(collection, user)?;
+        Ok(permissions
+            .into_iter()
+            .fold(
+                std::collections::HashMap::<String, Vec<Permission>>::new(),
+                |mut acc, schema| {
+                    let permission = Permission {
+                        user: schema.user_id.clone(),
+                        access_level: schema.access_level,
+                    };
+                    acc.entry(schema.data_id.clone()).or_default().push(permission);
+                    acc
+                },
+            )
+            .into_iter()
+            .map(|(data_id, permissions)| AccessControl { data_id, permissions })
+            .collect())
     }
 
     pub fn update_acl(&self, (namespace, collection): (&str, &str), acl: AccessControl, user: &str) -> StoreResult<()> {
@@ -255,7 +287,18 @@ impl Store {
         if data.owner != user {
             return Err(StoreError::PermissionDenied);
         }
-        self.acl_manager.update_acl(acl, user)
+        let backend = self.data_manager.backend_for(namespace)?;
+        let new_permissions = acl
+            .permissions
+            .into_iter()
+            .map(|perm| PermissionSchema {
+                data_id: acl.data_id.clone(),
+                user_id: perm.user,
+                access_level: perm.access_level,
+            })
+            .collect::<Vec<_>>();
+        backend.update_acls(collection, &data.id, &new_permissions, user)?;
+        Ok(())
     }
 
     pub fn delete_acl(&self, (namespace, collection): (&str, &str), data_id: &str, user: &str) -> StoreResult<()> {
@@ -265,7 +308,8 @@ impl Store {
         if data.owner != user {
             return Err(StoreError::PermissionDenied);
         }
-        self.acl_manager.delete_acls_by_data_id(data_id)?;
+        let backend = self.data_manager.backend_for(namespace)?;
+        backend.delete_acls_by_data_id(collection, data_id)?;
         Ok(())
     }
 }

@@ -133,14 +133,18 @@ impl AccessLevel {
             AccessLevel::FullAccess => "full_access",
         }
     }
-    pub fn from_str(s: &str) -> Option<Self> {
+}
+impl std::str::FromStr for AccessLevel {
+    type Err = StoreError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
-            "read" => Some(AccessLevel::Read),
-            "update" => Some(AccessLevel::Update),
-            "create" => Some(AccessLevel::Create),
-            "write" => Some(AccessLevel::Write),
-            "full_access" => Some(AccessLevel::FullAccess),
-            _ => None,
+            "read" => Ok(AccessLevel::Read),
+            "update" => Ok(AccessLevel::Update),
+            "create" => Ok(AccessLevel::Create),
+            "write" => Ok(AccessLevel::Write),
+            "full_access" => Ok(AccessLevel::FullAccess),
+            _ => Err(StoreError::Validation(format!("Invalid access level string: {}", s))),
         }
     }
 }

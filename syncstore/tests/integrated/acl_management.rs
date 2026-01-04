@@ -48,9 +48,9 @@ fn acl_basic_crud() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(fetched_acl.permissions[0].user, *user2);
     assert_eq!(fetched_acl.permissions[0].access_level, AccessLevel::Write);
 
-    let user_acls = store.get_user_acls(user1)?;
+    let user_acls = store.get_user_acls((namespace, "repo"), user1)?;
     assert_eq!(user_acls.len(), 0);
-    let user_acls = store.get_user_acls(user2)?;
+    let user_acls = store.get_user_acls((namespace, "repo"), user2)?;
     assert_eq!(user_acls.len(), 1);
     assert_eq!(user_acls[0].data_id, repo_id);
 
