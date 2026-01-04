@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::backend::Backend;
 use crate::error::{StoreError, StoreResult};
-use crate::types::{DataItem, DataItemDocument, Id};
+use crate::types::{AccessLevel, DataItem, DataItemDocument, Id, PermissionSchema};
 
 // ?let's write some user define schema checker here for now, late move to separate file module.
 mod checker {
@@ -210,6 +210,7 @@ impl SqliteBackend {
     /// common initialization, create internal tables
     ///
     /// __schemas: store collection schemas
+    /// __acls: store access control list entries
     ///
     fn init(&self) -> StoreResult<()> {
         // table to store collection schemas and a small meta for collections
@@ -219,6 +220,16 @@ impl SqliteBackend {
                 CREATE TABLE IF NOT EXISTS __schemas (
                     collection TEXT PRIMARY KEY,
                     schema TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS __acls (
+                    id TEXT PRIMARY KEY,
+                    data_collection TEXT NOT NULL,
+                    data_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    permission TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    owner TEXT NOT NULL
                 );
             "#,
         )?;
@@ -532,6 +543,8 @@ impl Backend for SqliteBackend {
         Ok((items, next_marker))
     }
 
+    // I feels that this is a wrong design,
+    // todo try destroy it.
     fn list_by_inspect(
         &self,
         collection: &str,
@@ -690,6 +703,129 @@ impl Backend for SqliteBackend {
             }
             // drop stmt before commit
         }
+        tx.commit()?;
+        Ok(())
+    }
+}
+
+// impl acls related methods
+impl SqliteBackend {
+    pub fn get_data_permissions(&self, data_collection: &str, data_id: &str) -> StoreResult<Vec<PermissionSchema>> {
+        let conn = self.get_conn()?;
+        let sql = format!("SELECT user_id, permission FROM __acls WHERE data_collection = ?1 AND data_id = ?2",);
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query(params![data_collection, data_id])?;
+        let mut permissions = Vec::new();
+        while let Some(row) = rows.next()? {
+            let user_id: String = row.get(0)?;
+            let permission_str: String = row.get(1)?;
+            let access_level = AccessLevel::from_str(&permission_str)
+                .ok_or_else(|| StoreError::Validation(format!("invalid permission string: {}", permission_str)))?;
+            permissions.push(PermissionSchema {
+                data_id: data_id.to_string(),
+                user_id,
+                access_level,
+            });
+        }
+        Ok(permissions)
+    }
+
+    pub fn get_user_permissions(&self, data_collection: &str, user_id: &str) -> StoreResult<Vec<PermissionSchema>> {
+        let conn = self.get_conn()?;
+        let sql = format!("SELECT data_id, permission FROM __acls WHERE data_collection = ?1 AND user_id = ?2",);
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query(params![data_collection, user_id])?;
+        let mut permissions = Vec::new();
+        while let Some(row) = rows.next()? {
+            let data_id: String = row.get(0)?;
+            let permission_str: String = row.get(1)?;
+            let access_level = AccessLevel::from_str(&permission_str)
+                .ok_or_else(|| StoreError::Validation(format!("invalid permission string: {}", permission_str)))?;
+            permissions.push(PermissionSchema {
+                data_id,
+                user_id: user_id.to_string(),
+                access_level,
+            });
+        }
+        Ok(permissions)
+    }
+
+    pub fn delete_acls_by_data_id(&self, data_collection: &str, data_id: &str) -> StoreResult<()> {
+        let conn = self.get_conn()?;
+        let sql = format!("DELETE FROM __acls WHERE data_collection = ?1 AND data_id = ?2",);
+        conn.execute(&sql, params![data_collection, data_id])?;
+        Ok(())
+    }
+
+    pub fn update_acls(
+        &self,
+        data_collection: &str,
+        data_id: &str,
+        new_permissions: &[PermissionSchema],
+        owner: &str,
+    ) -> StoreResult<()> {
+        let old_permissions = self.get_data_permissions(data_collection, data_id)?;
+
+        let mut deleted_ids = Vec::new();
+        let mut to_update_permissions = Vec::new();
+        let mut new_permissions: HashMap<String, PermissionSchema> =
+            HashMap::from_iter(new_permissions.iter().map(|p| (p.user_id.clone(), p.clone())));
+        for old in &old_permissions {
+            match new_permissions.remove(&old.user_id) {
+                // exists in both old and new, update if different
+                Some(new_p) if new_p.access_level != old.access_level => to_update_permissions.push(new_p),
+                // same permission, do nothing
+                Some(_) => {}
+                // only in old, delete
+                None => deleted_ids.push(old.user_id.clone()),
+            }
+        }
+        let updated_at = chrono::Utc::now();
+        let mut conn = self.get_conn()?;
+        let tx = conn.transaction()?;
+        for user_id in deleted_ids {
+            let sql = format!("DELETE FROM __acls WHERE data_collection = ?1 AND data_id = ?2 AND user_id = ?3",);
+            tx.execute(&sql, params![data_collection, data_id, user_id])?;
+        }
+        for p in to_update_permissions {
+            let permission_str = p.access_level.to_string();
+            let sql = format!(
+                "UPDATE __acls SET permission = ?1, updated_at = ?2 WHERE data_collection = ?3 AND data_id = ?4 AND user_id = ?5",
+            );
+            tx.execute(
+                &sql,
+                params![
+                    permission_str,
+                    updated_at.to_rfc3339(),
+                    data_collection,
+                    data_id,
+                    p.user_id
+                ],
+            )?;
+        }
+        for (_user_id, p) in new_permissions {
+            let permission_str = p.access_level.to_string();
+            let now = chrono::Utc::now();
+            let sql = format!(
+                "INSERT INTO __acls (id, data_collection, data_id, user_id, permission, created_at, updated_at, owner) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            );
+            let acl_id = uuid::Uuid::new_v4().to_string();
+            tx.execute(
+                &sql,
+                params![
+                    acl_id,
+                    data_collection,
+                    data_id,
+                    p.user_id,
+                    permission_str,
+                    now.to_rfc3339(),
+                    now.to_rfc3339(),
+                    owner
+                ],
+            )?;
+        }
+
         tx.commit()?;
         Ok(())
     }

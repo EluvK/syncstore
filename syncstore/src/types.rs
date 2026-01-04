@@ -123,6 +123,35 @@ pub enum AccessLevel {
     FullAccess,
 }
 
+impl AccessLevel {
+    pub fn to_string(&self) -> &'static str {
+        match self {
+            AccessLevel::Read => "read",
+            AccessLevel::Update => "update",
+            AccessLevel::Create => "create",
+            AccessLevel::Write => "write",
+            AccessLevel::FullAccess => "full_access",
+        }
+    }
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "read" => Some(AccessLevel::Read),
+            "update" => Some(AccessLevel::Update),
+            "create" => Some(AccessLevel::Create),
+            "write" => Some(AccessLevel::Write),
+            "full_access" => Some(AccessLevel::FullAccess),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PermissionSchema {
+    pub data_id: String,
+    pub user_id: String,
+    pub access_level: AccessLevel,
+}
+
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ACLMask: u8 {
