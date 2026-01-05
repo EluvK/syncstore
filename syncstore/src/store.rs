@@ -139,6 +139,34 @@ impl Store {
         backend.list_children(collection, parent_id, marker, limit)
     }
 
+    pub fn list_with_permission(
+        &self,
+        namespace: &str,
+        collection: &str,
+        marker: Option<String>,
+        limit: usize,
+        user: &str,
+    ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
+        let backend = self.data_manager.backend_for(namespace)?;
+        let permissions = backend.get_user_permissions(collection, user)?;
+        let mut all_items = Vec::new();
+        let mut next_marker = None;
+        for perm in permissions {
+            if let Some(marker) = &marker {
+                if &perm.data_id != marker {
+                    continue;
+                }
+            }
+            let data = backend.get(collection, &perm.data_id)?;
+            if all_items.len() >= limit {
+                next_marker = Some(data.id.clone());
+                break;
+            }
+            all_items.push(data);
+        }
+        Ok((all_items, next_marker))
+    }
+
     pub fn get(&self, namespace: &str, collection: &str, id: &Id, user: &str) -> StoreResult<DataItem> {
         let backend = self.data_manager.backend_for(namespace)?;
         let data = backend.get(collection, id)?;

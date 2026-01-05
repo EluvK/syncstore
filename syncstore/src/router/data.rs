@@ -41,16 +41,15 @@ async fn list_data(
     namespace: PathParam<String>,
     collection: PathParam<String>,
     parent_id: QueryParam<String, false>,
+    permission: QueryParam<bool, false>,
     marker: QueryParam<String, false>,
     limit: QueryParam<usize>,
     depot: &mut Depot,
 ) -> ServiceResult<ListDataResponse> {
     let user = depot.get::<String>("user_id")?;
-    tracing::info!(
-        "Listing data in namespace: {}, collection: {}",
-        namespace.as_str(),
-        collection.as_str()
-    );
+    let namespace = namespace.as_str();
+    let collection = collection.as_str();
+    let marker = marker.clone();
     // limit must be positive
     let limit = match *limit {
         0 => 1,
@@ -59,16 +58,14 @@ async fn list_data(
     };
     let store = depot.obtain::<Arc<Store>>()?;
     let (items, next_marker) = if let Some(parent_id) = parent_id.as_deref() {
-        store.list_children(
-            namespace.as_str(),
-            collection.as_str(),
-            parent_id,
-            marker.clone(),
-            limit,
-            user,
-        )?
+        tracing::info!("Listing data [children] namespace: {namespace}, collection: {collection}");
+        store.list_children(namespace, collection, parent_id, marker, limit, user)?
+    } else if let Some(true) = *permission {
+        tracing::info!("Listing data [with permission] namespace: {namespace}, collection: {collection}");
+        store.list_with_permission(namespace, collection, marker, limit, user)?
     } else {
-        store.list_by_owner(namespace.as_str(), collection.as_str(), marker.clone(), limit, user)?
+        tracing::info!("Listing data [by owner] namespace: {namespace}, collection: {collection}");
+        store.list_by_owner(namespace, collection, marker, limit, user)?
     };
     Ok(ListDataResponse {
         page_info: PageInfo {
