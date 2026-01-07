@@ -37,16 +37,6 @@ pub trait Backend: Send + Sync {
         limit: usize,
     ) -> StoreResult<(Vec<DataItem>, Option<String>)>;
 
-    /// List documents in a collection with inspection field and pagination
-    fn list_by_inspect(
-        &self,
-        collection: &str,
-        inspect_field: &str,
-        inspect: &str,
-        marker: Option<String>,
-        limit: usize,
-    ) -> StoreResult<(Vec<DataItem>, Option<String>)>;
-
     /// Get a document by id.
     fn get(&self, collection: &str, id: &Id) -> StoreResult<DataItem>;
 

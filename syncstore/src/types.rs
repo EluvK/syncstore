@@ -24,7 +24,6 @@ pub struct DataItemDocument {
     pub updated_at: DateTime<Utc>,
     pub owner: Uid,
     pub unique: Option<String>,
-    pub inspect: Option<String>,
     pub parent_id: Option<String>,
     pub body: String,
 }
@@ -40,7 +39,6 @@ impl TryFrom<DataItemDocument> for DataItem {
             updated_at: value.updated_at,
             owner: value.owner,
             unique: value.unique,
-            inspect: value.inspect,
             parent_id: value.parent_id,
             body,
         })
@@ -54,7 +52,6 @@ pub struct DataItem {
     pub updated_at: DateTime<Utc>,
     pub owner: Uid,
     pub unique: Option<String>,
-    pub inspect: Option<String>,
     pub parent_id: Option<String>,
     pub body: serde_json::Value,
 }
