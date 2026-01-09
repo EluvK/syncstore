@@ -41,22 +41,22 @@ target_schema = """
 owner_field = "author"
 data_fields = ["title", "category", "content", "repo_id"]
 
-[[data_mappings]]
-source_table = "subscribe"
-target_collection = "subscribe"
-target_schema = """
-{
-    "type": "object",
-    "properties": {
-        "user_id": { "type": "string" },
-        "repo_id": { "type": "string" }
-    },
-    "required": ["user_id", "repo_id"],
-    "x-parent-id": { "parent": "repo", "field": "repo_id" }
-}
-"""
-owner_field = "user_id" # here should be repo owner, but the source table has no such field, should alter this data later manually
-data_fields = ["user_id", "repo_id"]
+# [[data_mappings]]
+# source_table = "subscribe"
+# target_collection = "subscribe"
+# target_schema = """
+# {
+#     "type": "object",
+#     "properties": {
+#         "user_id": { "type": "string" },
+#         "repo_id": { "type": "string" }
+#     },
+#     "required": ["user_id", "repo_id"],
+#     "x-parent-id": { "parent": "repo", "field": "repo_id" }
+# }
+# """
+# owner_field = "user_id" # here should be repo owner, but the source table has no such field, should alter this data later manually
+# data_fields = ["user_id", "repo_id"]
 
 [[data_mappings]]
 source_table = "comment"

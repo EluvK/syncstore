@@ -35,22 +35,23 @@ async fn main() -> anyhow::Result<()> {
         }),
         // ✅ query users' subscriptions: list_by_owner()
         // ✅ query subscribers of certain repo: list_by_parent(repo_id)
-        "subscribe" => json!({
-            "type": "object",
-            "properties": {
-                "user_id": { "type": "string" },
-                "repo_id": { "type": "string" }
-            },
-            "required": ["user_id", "repo_id"],
-            "x-parent-id": { "parent": "repo", "field": "repo_id" }
-        }),
+        // "subscribe" => json!({
+        //     "type": "object",
+        //     "properties": {
+        //         "user_id": { "type": "string" },
+        //         "repo_id": { "type": "string" }
+        //     },
+        //     "required": ["user_id", "repo_id"],
+        //     "x-parent-id": { "parent": "repo", "field": "repo_id" }
+        // }),
         // ✅ query comments of certain post: list_by_parent(post_id)
         "comment" => json!({
             "type": "object",
             "properties": {
                 "content": { "type": "string" },
                 "post_id": { "type": "string" },
-                "parent_id": { "type": ["string", "null"] }
+                "parent_id": { "type": ["string", "null"] },
+                "paragraph_id": { "type": ["string", "null"] }
             },
             "required": ["content", "post_id"],
             "x-parent-id": { "parent": "post", "field": "post_id" }

@@ -484,7 +484,7 @@ impl Backend for SqliteBackend {
              LIMIT ?3",
             table
         );
-        tracing::info!("list sql: {}, {}", sql, limit);
+        // tracing::info!("list sql: {}, {}", sql, limit);
         let mut stmt = conn.prepare(&sql)?;
         let mut rows = stmt.query(params![parent_id, marker, limit as i64 + 1])?;
         let mut items = Vec::new();
