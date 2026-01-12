@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use base64::Engine;
 use rusqlite::{Connection, OpenFlags};
 use serde::Deserialize;
 use serde_json::json;
@@ -76,9 +77,12 @@ fn main() -> anyhow::Result<()> {
             let created_at = row.get("created_at")?;
             let updated_at = row.get("updated_at")?;
 
+            let (pk, sk) = syncstore::utils::hpke::generate_keypair();
             let body = json!({
                 "username": username,
                 "password": password,
+                "public_key": base64::engine::general_purpose::STANDARD.encode(&pk),
+                "secret_key": base64::engine::general_purpose::STANDARD.encode(&sk),
             });
 
             println!("Imported user: {}", &id);

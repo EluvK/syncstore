@@ -27,6 +27,7 @@ pub struct UserProfile {
     pub user_id: String,
     pub name: String,
     pub avatar_url: Option<String>,
+    pub public_key: Vec<u8>,
 }
 
 impl salvo::Scribe for UserProfile {
@@ -41,6 +42,7 @@ impl UserProfile {
             user_id,
             name: user_schema.username.clone(),
             avatar_url: user_schema.avatar_url.clone(),
+            public_key: user_schema.public_key.clone(),
         }
     }
 }

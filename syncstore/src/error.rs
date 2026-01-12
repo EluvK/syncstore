@@ -33,6 +33,10 @@ pub enum ServiceError {
     #[error("JWT error: {0}")]
     JwtError(#[from] jsonwebtoken::errors::Error),
 
+    /// hpke error
+    #[error("HPKE error: {0}")]
+    HpkeError(hpke::HpkeError),
+
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
 
@@ -69,7 +73,7 @@ impl Scribe for ServiceError {
                     res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
                 }
             },
-            ServiceError::JwtError(_) => {
+            ServiceError::JwtError(_) | ServiceError::HpkeError(_) => {
                 res.status_code(StatusCode::UNAUTHORIZED);
             }
             ServiceError::InternalServerError(_) => {
@@ -92,6 +96,13 @@ impl From<Option<&Box<dyn Any + Send + Sync>>> for ServiceError {
                 .cloned()
                 .unwrap_or_else(|| "Unknown error".to_string()),
         )
+    }
+}
+
+// from hpke::HpkeError to ServiceError
+impl From<hpke::HpkeError> for ServiceError {
+    fn from(error: hpke::HpkeError) -> Self {
+        ServiceError::HpkeError(error)
     }
 }
 

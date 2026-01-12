@@ -7,12 +7,20 @@ use crate::error::StoreError;
 pub type Id = String;
 pub type Uid = String;
 
+use base64_serde::base64_serde_type;
+
+base64_serde_type!(Base64Standard, base64::engine::general_purpose::STANDARD);
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserSchema {
     pub username: String,
     pub password: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avatar_url: Option<String>,
+    #[serde(with = "Base64Standard")]
+    pub public_key: Vec<u8>,
+    #[serde(with = "Base64Standard")]
+    pub secret_key: Vec<u8>,
 }
 
 /// DataItemDocument

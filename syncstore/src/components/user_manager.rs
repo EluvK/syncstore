@@ -1,5 +1,7 @@
 use std::{path::Path, sync::Arc};
 
+use base64::Engine;
+
 use crate::{
     backend::{Backend, SqliteBackend, sqlite::SqliteBackendBuilder},
     error::StoreResult,
@@ -22,9 +24,11 @@ impl UserManager {
             "properties": {
                 "username": { "type": "string" },
                 "password": { "type": "string" },
-                "avatar_url": { "type": "string" }
+                "avatar_url": { "type": "string" },
+                "public_key": { "type": "string", "contentEncoding": "base64" },
+                "secret_key": { "type": "string", "contentEncoding": "base64" }
             },
-            "required": ["username", "password"],
+            "required": ["username", "password", "public_key", "secret_key"],
             "x-unique": "username"
         });
         let friend_schema = serde_json::json!({
@@ -48,9 +52,12 @@ impl UserManager {
     }
 
     pub fn create_user(&self, username: &str, password: &str) -> StoreResult<()> {
+        let (pk, sk) = crate::utils::hpke::generate_keypair();
         let user = serde_json::json!({
             "username": username,
-            "password": password
+            "password": password,
+            "public_key": base64::engine::general_purpose::STANDARD.encode(&pk),
+            "secret_key": base64::engine::general_purpose::STANDARD.encode(&sk),
         });
         self.backend.insert(USER_TABLE, &user, ROOT_OWNER.to_string())?;
         Ok(())
