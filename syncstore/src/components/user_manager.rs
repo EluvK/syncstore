@@ -5,7 +5,7 @@ use base64::Engine;
 use crate::{
     backend::{Backend, SqliteBackend, sqlite::SqliteBackendBuilder},
     error::StoreResult,
-    types::UserSchema,
+    types::{UserSchema, UserSchemaDocument},
     utils::constant::{FRIENDS_TABLE, ROOT_OWNER, USER_TABLE},
 };
 
@@ -52,7 +52,7 @@ impl UserManager {
     }
 
     pub fn create_user(&self, username: &str, password: &str) -> StoreResult<()> {
-        let (pk, sk) = crate::utils::hpke::generate_keypair();
+        let (sk, pk) = crate::utils::hpke::generate_keypair();
         let user = serde_json::json!({
             "username": username,
             "password": password,
@@ -75,12 +75,16 @@ impl UserManager {
 
     pub fn get_user(&self, user_id: &String) -> StoreResult<UserSchema> {
         let item = self.backend.get(USER_TABLE, user_id)?;
-        let user_profile = serde_json::from_value::<UserSchema>(item.body)?;
-        Ok(user_profile)
+        let user_profile = serde_json::from_value::<UserSchemaDocument>(item.body)?;
+        Ok(UserSchema::from_document(user_id.clone(), user_profile))
     }
 
     pub fn update_user(&self, user_id: &String, user: &UserSchema) -> StoreResult<()> {
-        self.backend.update(USER_TABLE, user_id, &serde_json::to_value(user)?)?;
+        self.backend.update(
+            USER_TABLE,
+            user_id,
+            &serde_json::to_value(UserSchemaDocument::from(user.clone()))?,
+        )?;
         Ok(())
     }
 

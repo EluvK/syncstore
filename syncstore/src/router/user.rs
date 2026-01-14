@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use base64::Engine;
 use salvo::{
     Depot, Router, Writer,
     oapi::{
@@ -27,7 +28,7 @@ pub struct UserProfile {
     pub user_id: String,
     pub name: String,
     pub avatar_url: Option<String>,
-    pub public_key: Vec<u8>,
+    pub public_key: String,
 }
 
 impl salvo::Scribe for UserProfile {
@@ -42,7 +43,7 @@ impl UserProfile {
             user_id,
             name: user_schema.username.clone(),
             avatar_url: user_schema.avatar_url.clone(),
-            public_key: user_schema.public_key.clone(),
+            public_key: base64::engine::general_purpose::STANDARD.encode(&user_schema.public_key),
         }
     }
 }
@@ -77,13 +78,13 @@ async fn update_user(
     depot: &mut Depot,
 ) -> ServiceResult<UserProfile> {
     let store = depot.obtain::<Arc<Store>>()?;
-    let user_id = depot.get::<String>("user_id")?.to_string();
-    if user_id != *id {
+    let user = depot.get::<UserSchema>("user_schema")?;
+    if user.user_id != *id {
         return Err(ServiceError::Forbidden(
             "Cannot update other user's profile".to_string(),
         ));
     }
-    let user_schema = store.get_user(&user_id)?;
+    let user_schema = store.get_user(&user.user_id)?;
     let mut updated_schema = user_schema.clone();
     if let Some(name) = &req.0.name {
         updated_schema.username = name.clone();
@@ -94,9 +95,9 @@ async fn update_user(
     if let Some(avatar_url) = &req.0.avatar_url {
         updated_schema.avatar_url = Some(avatar_url.clone());
     }
-    store.update_user(&user_id, &updated_schema)?;
-    let updated_user = store.get_user(&user_id)?;
-    let updated_user = UserProfile::from_user_schema(user_id, &updated_user);
+    store.update_user(&user.user_id, &updated_schema)?;
+    let updated_user = store.get_user(&user.user_id)?;
+    let updated_user = UserProfile::from_user_schema(user.user_id.clone(), &updated_user);
     Ok(updated_user)
 }
 
@@ -117,8 +118,8 @@ pub struct UpdateUserProfile {
 )]
 async fn list_friends(depot: &mut Depot) -> ServiceResult<ListFriendsResponse> {
     let store = depot.obtain::<Arc<Store>>()?;
-    let user_id = depot.get::<String>("user_id")?.to_string();
-    let friend_schemas = store.list_friends(&user_id)?;
+    let user = depot.get::<UserSchema>("user_schema")?;
+    let friend_schemas = store.list_friends(&user.user_id)?;
     let friends = friend_schemas
         .into_iter()
         .map(|(user_id, friend_schema)| UserProfile::from_user_schema(user_id, &friend_schema))
@@ -148,8 +149,8 @@ impl salvo::Scribe for ListFriendsResponse {
 )]
 async fn add_friend(req: JsonBody<AddFriendRequest>, depot: &mut Depot) -> ServiceResult<()> {
     let store = depot.obtain::<Arc<Store>>()?;
-    let user_id = depot.get::<String>("user_id")?.to_string();
-    store.add_friend(&user_id, &req.0.friend_id)?;
+    let user = depot.get::<UserSchema>("user_schema")?;
+    store.add_friend(&user.user_id, &req.0.friend_id)?;
     Ok(())
 }
 

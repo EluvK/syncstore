@@ -1,6 +1,5 @@
 use hpke::{
-    Deserializable, Kem as _, OpModeR, OpModeS, Serializable, aead::ChaCha20Poly1305, kdf::HkdfSha384,
-    kem::X25519HkdfSha256,
+    Deserializable, Kem as _, OpModeR, OpModeS, Serializable, aead::AesGcm256, kdf::HkdfSha256, kem::X25519HkdfSha256,
 };
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -8,8 +7,8 @@ use crate::error::ServiceResult;
 
 // Define the HPKE cipher suite to be used throughout the application
 type Kem = X25519HkdfSha256;
-type Aead = ChaCha20Poly1305;
-type Kdf = HkdfSha384;
+type Aead = AesGcm256;
+type Kdf = HkdfSha256;
 
 const INFO_STR: &[u8] = b"syncstore hpke v1";
 
@@ -49,7 +48,7 @@ pub fn decrypt_data(
 /// - plaintext: the raw data to be encrypted
 /// - public_key_bytes: the user generated public key bytes obtained from request header or other means
 /// - aad: associated additional data, e.g., API path to bind the encryption context
-/// 
+///
 /// return: (encapsulated_key_bytes, ciphertext)
 pub fn encrypt_data(plaintext: &[u8], public_key_bytes: &[u8], aad: &[u8]) -> ServiceResult<(Vec<u8>, Vec<u8>)> {
     let mut rng = StdRng::from_os_rng();

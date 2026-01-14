@@ -12,7 +12,7 @@ use base64_serde::base64_serde_type;
 base64_serde_type!(Base64Standard, base64::engine::general_purpose::STANDARD);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct UserSchema {
+pub struct UserSchemaDocument {
     pub username: String,
     pub password: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -21,6 +21,41 @@ pub struct UserSchema {
     pub public_key: Vec<u8>,
     #[serde(with = "Base64Standard")]
     pub secret_key: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UserSchema {
+    pub user_id: String,
+    pub username: String,
+    pub password: String,
+    pub avatar_url: Option<String>,
+    pub public_key: Vec<u8>,
+    pub secret_key: Vec<u8>,
+}
+
+impl UserSchema {
+    pub fn from_document(user_id: String, doc: UserSchemaDocument) -> Self {
+        UserSchema {
+            user_id,
+            username: doc.username,
+            password: doc.password,
+            avatar_url: doc.avatar_url,
+            public_key: doc.public_key,
+            secret_key: doc.secret_key,
+        }
+    }
+}
+
+impl From<UserSchema> for UserSchemaDocument {
+    fn from(value: UserSchema) -> Self {
+        UserSchemaDocument {
+            username: value.username,
+            password: value.password,
+            avatar_url: value.avatar_url,
+            public_key: value.public_key,
+            secret_key: value.secret_key,
+        }
+    }
 }
 
 /// DataItemDocument

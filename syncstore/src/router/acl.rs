@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::ServiceResult,
     store::Store,
-    types::{AccessControl, Permission},
+    types::{AccessControl, Permission, UserSchema},
 };
 
 pub fn create_router() -> Router {
@@ -44,12 +44,12 @@ async fn update_acl(
     depot: &mut Depot,
 ) -> ServiceResult<String> {
     let store = depot.obtain::<Arc<Store>>()?;
-    let user = depot.get::<String>("user_id")?;
+    let user = depot.get::<UserSchema>("user_schema")?;
     let acl = AccessControl {
         data_id: id.to_string(),
         permissions: req.permissions.clone(),
     };
-    store.update_acl((namespace.as_str(), collection.as_str()), acl, user)?;
+    store.update_acl((namespace.as_str(), collection.as_str()), acl, &user.user_id)?;
     tracing::info!("update_acl for data {}", id.as_str());
     Ok("success".to_string())
 }
@@ -75,8 +75,8 @@ async fn get_acl(
     depot: &mut Depot,
 ) -> ServiceResult<GetAclResponse> {
     let store = depot.obtain::<Arc<Store>>()?;
-    let user = depot.get::<String>("user_id")?;
-    let acl = store.get_data_acl((namespace.as_str(), collection.as_str()), id.as_str(), user)?;
+    let user = depot.get::<UserSchema>("user_schema")?;
+    let acl = store.get_data_acl((namespace.as_str(), collection.as_str()), id.as_str(), &user.user_id)?;
     tracing::info!("get_acl for data {}", id.as_str());
     Ok(GetAclResponse {
         permissions: acl.permissions,
@@ -110,8 +110,8 @@ async fn delete_acl(
     depot: &mut Depot,
 ) -> ServiceResult<()> {
     let store = depot.obtain::<Arc<Store>>()?;
-    let user = depot.get::<String>("user_id")?;
-    store.delete_acl((namespace.as_str(), collection.as_str()), id.as_str(), user)?;
+    let user = depot.get::<UserSchema>("user_schema")?;
+    store.delete_acl((namespace.as_str(), collection.as_str()), id.as_str(), &user.user_id)?;
     tracing::info!("delete_acl for data {}", id.as_str());
     Ok(())
 }

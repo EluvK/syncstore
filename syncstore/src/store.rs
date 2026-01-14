@@ -152,10 +152,10 @@ impl Store {
         let mut all_items = Vec::new();
         let mut next_marker = None;
         for perm in permissions {
-            if let Some(marker) = &marker {
-                if &perm.data_id != marker {
-                    continue;
-                }
+            if let Some(marker) = &marker
+                && &perm.data_id != marker
+            {
+                continue;
             }
             let data = backend.get(collection, &perm.data_id)?;
             if all_items.len() >= limit {

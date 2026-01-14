@@ -8,9 +8,10 @@ mod user;
 
 use std::sync::Arc;
 
+use base64::Engine;
 use salvo::{
     Depot, FlowCtrl, Request, Response, Router, affix_state, handler,
-    http::HeaderValue,
+    http::{HeaderValue, ResBody},
     jwt_auth::{ConstDecoder, HeaderFinder, QueryFinder},
     oapi::{RouterExt, SecurityRequirement},
     prelude::{JwtAuth, JwtAuthDepotExt, JwtAuthState},
@@ -20,6 +21,7 @@ use crate::{
     config::ServiceConfig,
     error::{ServiceError, ServiceResult},
     store::Store,
+    types::UserSchema,
     utils::jwt::JwtClaims,
 };
 
@@ -88,10 +90,7 @@ async fn jwt_to_user(
                 return Ok(());
             };
             tracing::info!("Authorized. user:{}({})", user.username, user_id);
-            depot.insert("user_id", user_id.clone());
-            depot.insert("user_sk", user.secret_key.clone());
-            depot.insert("user_pk", user.public_key.clone());
-            // maybe just insert all the user schema object
+            depot.insert("user_schema", user.clone());
             ctrl.call_next(req, depot, res).await;
         }
         (_, _, Some(jwt_error)) => {
@@ -112,58 +111,57 @@ async fn jwt_to_user(
 // handle secure headers
 #[handler]
 async fn hpke(req: &mut Request, res: &mut Response, depot: &mut Depot, ctrl: &mut FlowCtrl) -> ServiceResult<()> {
-    let (Some(enc_key), Some(client_pubkey)) = (
-        req.headers().get("X-DataSecure").cloned(),
-        req.headers().get("X-Client-PubKey").cloned(),
-    ) else {
+    // check if the request has the HPKE headers, fetch and decode them
+    let Some((encapped_key, session_pubkey)) = req
+        .headers()
+        .get("X-Enc")
+        .and_then(|v| v.to_str().ok())
+        .zip(req.headers().get("X-Session-PubKey").and_then(|v| v.to_str().ok()))
+        .and_then(|(e, s)| {
+            let e_dec = base64::engine::general_purpose::STANDARD.decode(e).ok()?;
+            let s_dec = base64::engine::general_purpose::STANDARD.decode(s).ok()?;
+            Some((e_dec, s_dec))
+        })
+    else {
         ctrl.call_next(req, depot, res).await;
         return Ok(());
     };
-
-    let enc_key = enc_key.to_str().map_err(|e| {
-        tracing::warn!("HPKE: Invalid X-DataSecure header: {}", e);
-        ServiceError::Unauthorized("Invalid X-DataSecure header".to_string())
-    })?;
-    let client_pubkey = client_pubkey.to_str().map_err(|e| {
-        tracing::warn!("HPKE: Invalid X-Client-PubKey header: {}", e);
-        ServiceError::Unauthorized("Invalid X-Client-PubKey header".to_string())
-    })?;
-
-    let Ok(user_sk) = depot.get::<Vec<u8>>("user_sk") else {
-        tracing::warn!("HPKE: user_sk not found in depot");
-        res.render(ServiceError::Unauthorized("user_sk not found".to_string()));
+    tracing::info!("HPKE: headers found in path: {}", req.uri().path());
+    let Ok(user_schema) = depot.get::<UserSchema>("user_schema") else {
+        tracing::warn!("HPKE: user_schema not found in depot");
+        res.render(ServiceError::Unauthorized("user_schema not found".to_string()));
         ctrl.skip_rest();
         return Ok(());
     };
-    let user_sk = user_sk.clone();
-    let encapped_key = enc_key.as_bytes().to_vec();
     let aad = req.uri().path().as_bytes().to_vec();
 
+    // read the request body as ciphertext
     let Ok(ciphertext) = req.payload().await else {
         tracing::warn!("HPKE: Failed to read request payload");
         res.render(ServiceError::Unauthorized("Failed to read request payload".to_string()));
         ctrl.skip_rest();
         return Ok(());
     };
-
-    let ciphertext = ciphertext.to_vec();
-    let plaintext = crate::utils::hpke::decrypt_data(&ciphertext, &encapped_key, &user_sk, &aad)?;
+    let plaintext = crate::utils::hpke::decrypt_data(ciphertext, &encapped_key, &user_schema.secret_key, &aad)?;
+    // replace the request body with the decrypted plaintext
     req.replace_body(plaintext.into());
 
     ctrl.call_next(req, depot, res).await;
 
+    // encrypt the response body
     let body = res.take_body();
     if let salvo::http::ResBody::Once(bytes) = body {
-        let (new_enc_key, encrypted_body) = crate::utils::hpke::encrypt_data(&bytes, client_pubkey.as_bytes(), &aad)?;
-
+        let (new_enc_key, encrypted_body) = crate::utils::hpke::encrypt_data(&bytes, &session_pubkey, &aad)?;
         res.headers_mut().insert(
-            "X-DataSecure",
-            HeaderValue::from_bytes(&new_enc_key).map_err(|e| {
-                tracing::warn!("HPKE: Invalid X-DataSecure header value: {}", e);
-                ServiceError::InternalServerError("Invalid X-DataSecure header value".to_string())
+            "X-Enc",
+            HeaderValue::from_str(&base64::engine::general_purpose::STANDARD.encode(&new_enc_key)).map_err(|e| {
+                tracing::warn!("HPKE: Invalid X-Enc header value: {}", e);
+                ServiceError::InternalServerError("Invalid X-Enc header value".to_string())
             })?,
         );
-        res.replace_body(encrypted_body.into());
+        res.headers_mut()
+            .insert("Content-Type", HeaderValue::from_static("application/octet-stream"));
+        res.replace_body(ResBody::Once(encrypted_body.into()));
     } else {
         res.replace_body(body);
         tracing::warn!("HPKE: other body is not supported for encryption");

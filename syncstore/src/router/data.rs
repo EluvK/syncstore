@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::ServiceResult,
     store::Store,
-    types::{DataItem, DataItemSummary},
+    types::{DataItem, DataItemSummary, UserSchema},
 };
 
 pub fn create_router() -> Router {
@@ -46,7 +46,7 @@ async fn list_data(
     limit: QueryParam<usize>,
     depot: &mut Depot,
 ) -> ServiceResult<ListDataResponse> {
-    let user = depot.get::<String>("user_id")?;
+    let user = depot.get::<UserSchema>("user_schema")?;
     let namespace = namespace.as_str();
     let collection = collection.as_str();
     let marker = marker.clone();
@@ -59,13 +59,13 @@ async fn list_data(
     let store = depot.obtain::<Arc<Store>>()?;
     let (items, next_marker) = if let Some(parent_id) = parent_id.as_deref() {
         tracing::info!("Listing data [children] namespace: {namespace}, collection: {collection}");
-        store.list_children(namespace, collection, parent_id, marker, limit, user)?
+        store.list_children(namespace, collection, parent_id, marker, limit, &user.user_id)?
     } else if let Some(true) = *permission {
         tracing::info!("Listing data [with permission] namespace: {namespace}, collection: {collection}");
-        store.list_with_permission(namespace, collection, marker, limit, user)?
+        store.list_with_permission(namespace, collection, marker, limit, &user.user_id)?
     } else {
         tracing::info!("Listing data [by owner] namespace: {namespace}, collection: {collection}");
-        store.list_by_owner(namespace, collection, marker, limit, user)?
+        store.list_by_owner(namespace, collection, marker, limit, &user.user_id)?
     };
     Ok(ListDataResponse {
         page_info: PageInfo {
@@ -110,8 +110,8 @@ async fn get_data(
     depot: &mut Depot,
 ) -> ServiceResult<DataItem> {
     let store = depot.obtain::<Arc<Store>>()?;
-    let user = depot.get::<String>("user_id")?;
-    Ok(store.get(&namespace, &collection, &id, user)?)
+    let user = depot.get::<UserSchema>("user_schema")?;
+    Ok(store.get(&namespace, &collection, &id, &user.user_id)?)
 }
 
 /// Create a new data item
@@ -130,9 +130,9 @@ async fn create_data(
     req: JsonBody<serde_json::Value>,
     depot: &mut Depot,
 ) -> ServiceResult<String> {
-    let user = depot.get::<String>("user_id")?;
+    let user = depot.get::<UserSchema>("user_schema")?;
     let store = depot.obtain::<Arc<Store>>()?;
-    let id = store.insert(&namespace, &collection, &req.0, user)?;
+    let id = store.insert(&namespace, &collection, &req.0, &user.user_id)?;
     Ok(id)
 }
 
@@ -154,9 +154,9 @@ async fn update_data(
     req: JsonBody<serde_json::Value>,
     depot: &mut Depot,
 ) -> ServiceResult<String> {
-    let user = depot.get::<String>("user_id")?;
+    let user = depot.get::<UserSchema>("user_schema")?;
     let store = depot.obtain::<Arc<Store>>()?;
-    let item = store.update(&namespace, &collection, &id, &req.0, user)?;
+    let item = store.update(&namespace, &collection, &id, &req.0, &user.user_id)?;
     Ok(item.id)
 }
 
@@ -176,9 +176,9 @@ async fn delete_data(
     depot: &mut Depot,
     resp: &mut Response,
 ) -> ServiceResult<()> {
-    let user = depot.get::<String>("user_id")?;
+    let user = depot.get::<UserSchema>("user_schema")?;
     let store = depot.obtain::<Arc<Store>>()?;
-    store.delete(&namespace, &collection, &id, user)?;
+    store.delete(&namespace, &collection, &id, &user.user_id)?;
     resp.status_code(StatusCode::NO_CONTENT);
     Ok(())
 }
