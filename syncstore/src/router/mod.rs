@@ -4,6 +4,7 @@ mod auth;
 mod data;
 mod fs;
 mod health;
+mod hpke_wrapper;
 mod user;
 
 use std::sync::Arc;
@@ -41,7 +42,8 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
     let auth_router = Router::new()
         .hoop(auth_handler)
         .hoop(jwt_to_user)
-        .hoop(hpke)
+        .hoop(header_makeup)
+        // .hoop(hpke)
         .push(Router::with_path("acl").push(acl::create_router()))
         .push(Router::with_path("auth").push(auth::create_router()))
         .push(Router::with_path("data").push(data::create_router()))
@@ -91,6 +93,7 @@ async fn jwt_to_user(
             };
             tracing::info!("Authorized. user:{}({})", user.username, user_id);
             depot.insert("user_schema", user.clone());
+            req.extensions_mut().insert(user.clone());
             ctrl.call_next(req, depot, res).await;
         }
         (_, _, Some(jwt_error)) => {
@@ -105,6 +108,35 @@ async fn jwt_to_user(
         }
     }
 
+    Ok(())
+}
+
+#[handler]
+async fn header_makeup(
+    req: &mut Request,
+    res: &mut Response,
+    depot: &mut Depot,
+    ctrl: &mut FlowCtrl,
+) -> ServiceResult<()> {
+    // if "X-Enc" and "X-Session-PubKey" headers exist, make it into res headers as well
+    // get the url path and make into "X-Path" header
+    if let Some(x_enc) = req.headers().get("X-Enc") {
+        res.headers_mut().insert("X-Enc", x_enc.clone());
+    }
+    if let Some(x_session_pubkey) = req.headers().get("X-Session-PubKey") {
+        res.headers_mut().insert("X-Session-PubKey", x_session_pubkey.clone());
+    }
+    let path = req.uri().path().to_string();
+    // req.headers_mut().insert(
+    //     "X-Path",
+    //     HeaderValue::from_str(&path).unwrap_or_else(|_| HeaderValue::from_static("")),
+    // );
+    res.headers_mut().insert(
+        "X-Path",
+        HeaderValue::from_str(&path).unwrap_or_else(|_| HeaderValue::from_static("")),
+    );
+
+    ctrl.call_next(req, depot, res).await;
     Ok(())
 }
 

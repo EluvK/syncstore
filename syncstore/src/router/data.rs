@@ -5,7 +5,7 @@ use salvo::{
     http::StatusCode,
     oapi::{
         RouterExt, ToResponse, ToSchema, endpoint,
-        extract::{JsonBody, PathParam, QueryParam},
+        extract::{PathParam, QueryParam},
     },
     writing::Json,
 };
@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::ServiceResult,
+    router::hpke_wrapper::{HpkeRequest, HpkeResponse},
     store::Store,
     types::{DataItem, DataItemSummary, UserSchema},
 };
@@ -45,7 +46,7 @@ async fn list_data(
     marker: QueryParam<String, false>,
     limit: QueryParam<usize>,
     depot: &mut Depot,
-) -> ServiceResult<ListDataResponse> {
+) -> ServiceResult<HpkeResponse<ListDataResponse>> {
     let user = depot.get::<UserSchema>("user_schema")?;
     let namespace = namespace.as_str();
     let collection = collection.as_str();
@@ -67,13 +68,13 @@ async fn list_data(
         tracing::info!("Listing data [by owner] namespace: {namespace}, collection: {collection}");
         store.list_by_owner(namespace, collection, marker, limit, &user.user_id)?
     };
-    Ok(ListDataResponse {
+    Ok(HpkeResponse(ListDataResponse {
         page_info: PageInfo {
             count: items.len(),
             next_marker,
         },
         items: items.into_iter().map(Into::into).collect(),
-    })
+    }))
 }
 
 #[derive(Serialize, ToResponse, ToSchema)]
@@ -108,10 +109,10 @@ async fn get_data(
     collection: PathParam<String>,
     id: PathParam<String>,
     depot: &mut Depot,
-) -> ServiceResult<DataItem> {
+) -> ServiceResult<HpkeResponse<DataItem>> {
     let store = depot.obtain::<Arc<Store>>()?;
     let user = depot.get::<UserSchema>("user_schema")?;
-    Ok(store.get(&namespace, &collection, &id, &user.user_id)?)
+    Ok(HpkeResponse(store.get(&namespace, &collection, &id, &user.user_id)?))
 }
 
 /// Create a new data item
@@ -127,13 +128,13 @@ async fn get_data(
 async fn create_data(
     namespace: PathParam<String>,
     collection: PathParam<String>,
-    req: JsonBody<serde_json::Value>,
+    req: HpkeRequest<serde_json::Value>,
     depot: &mut Depot,
-) -> ServiceResult<String> {
+) -> ServiceResult<HpkeResponse<String>> {
     let user = depot.get::<UserSchema>("user_schema")?;
     let store = depot.obtain::<Arc<Store>>()?;
     let id = store.insert(&namespace, &collection, &req.0, &user.user_id)?;
-    Ok(id)
+    Ok(HpkeResponse(id))
 }
 
 /// Update an existing data item
@@ -151,13 +152,13 @@ async fn update_data(
     namespace: PathParam<String>,
     collection: PathParam<String>,
     id: PathParam<String>,
-    req: JsonBody<serde_json::Value>,
+    req: HpkeRequest<serde_json::Value>,
     depot: &mut Depot,
-) -> ServiceResult<String> {
+) -> ServiceResult<HpkeResponse<String>> {
     let user = depot.get::<UserSchema>("user_schema")?;
     let store = depot.obtain::<Arc<Store>>()?;
     let item = store.update(&namespace, &collection, &id, &req.0, &user.user_id)?;
-    Ok(item.id)
+    Ok(HpkeResponse(item.id))
 }
 
 /// Delete a data item

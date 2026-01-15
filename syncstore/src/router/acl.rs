@@ -2,15 +2,13 @@ use std::sync::Arc;
 
 use salvo::{
     Depot, Router, Scribe, Writer,
-    oapi::{
-        RouterExt, ToResponse, ToSchema, endpoint,
-        extract::{JsonBody, PathParam},
-    },
+    oapi::{RouterExt, ToResponse, ToSchema, endpoint, extract::PathParam},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     error::ServiceResult,
+    router::hpke_wrapper::{HpkeRequest, HpkeResponse},
     store::Store,
     types::{AccessControl, Permission, UserSchema},
 };
@@ -40,18 +38,18 @@ async fn update_acl(
     namespace: PathParam<String>,
     collection: PathParam<String>,
     id: PathParam<String>,
-    req: JsonBody<CreateAclRequest>,
+    req: HpkeRequest<CreateAclRequest>,
     depot: &mut Depot,
-) -> ServiceResult<String> {
+) -> ServiceResult<HpkeResponse<String>> {
     let store = depot.obtain::<Arc<Store>>()?;
     let user = depot.get::<UserSchema>("user_schema")?;
     let acl = AccessControl {
         data_id: id.to_string(),
-        permissions: req.permissions.clone(),
+        permissions: req.0.permissions.clone(),
     };
     store.update_acl((namespace.as_str(), collection.as_str()), acl, &user.user_id)?;
     tracing::info!("update_acl for data {}", id.as_str());
-    Ok("success".to_string())
+    Ok(HpkeResponse("success".to_string()))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -73,14 +71,14 @@ async fn get_acl(
     collection: PathParam<String>,
     id: PathParam<String>,
     depot: &mut Depot,
-) -> ServiceResult<GetAclResponse> {
+) -> ServiceResult<HpkeResponse<GetAclResponse>> {
     let store = depot.obtain::<Arc<Store>>()?;
     let user = depot.get::<UserSchema>("user_schema")?;
     let acl = store.get_data_acl((namespace.as_str(), collection.as_str()), id.as_str(), &user.user_id)?;
     tracing::info!("get_acl for data {}", id.as_str());
-    Ok(GetAclResponse {
+    Ok(HpkeResponse(GetAclResponse {
         permissions: acl.permissions,
-    })
+    }))
 }
 
 #[derive(Serialize, ToSchema, ToResponse)]

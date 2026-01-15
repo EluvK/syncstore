@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{ServiceError, ServiceResult},
+    router::hpke_wrapper::{HpkeRequest, HpkeResponse},
     store::Store,
     types::UserSchema,
 };
@@ -74,9 +75,9 @@ async fn get_user(id: PathParam<String>, depot: &mut Depot) -> ServiceResult<Use
 )]
 async fn update_user(
     id: PathParam<String>,
-    req: JsonBody<UpdateUserProfile>,
+    req: HpkeRequest<UpdateUserProfile>,
     depot: &mut Depot,
-) -> ServiceResult<UserProfile> {
+) -> ServiceResult<HpkeResponse<UserProfile>> {
     let store = depot.obtain::<Arc<Store>>()?;
     let user = depot.get::<UserSchema>("user_schema")?;
     if user.user_id != *id {
@@ -98,7 +99,7 @@ async fn update_user(
     store.update_user(&user.user_id, &updated_schema)?;
     let updated_user = store.get_user(&user.user_id)?;
     let updated_user = UserProfile::from_user_schema(user.user_id.clone(), &updated_user);
-    Ok(updated_user)
+    Ok(HpkeResponse(updated_user))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -116,7 +117,7 @@ pub struct UpdateUserProfile {
         (status_code = 403, description = "FORBIDDEN"),
     )
 )]
-async fn list_friends(depot: &mut Depot) -> ServiceResult<ListFriendsResponse> {
+async fn list_friends(depot: &mut Depot) -> ServiceResult<HpkeResponse<ListFriendsResponse>> {
     let store = depot.obtain::<Arc<Store>>()?;
     let user = depot.get::<UserSchema>("user_schema")?;
     let friend_schemas = store.list_friends(&user.user_id)?;
@@ -124,7 +125,7 @@ async fn list_friends(depot: &mut Depot) -> ServiceResult<ListFriendsResponse> {
         .into_iter()
         .map(|(user_id, friend_schema)| UserProfile::from_user_schema(user_id, &friend_schema))
         .collect();
-    Ok(ListFriendsResponse { friends })
+    Ok(HpkeResponse(ListFriendsResponse { friends }))
 }
 
 #[derive(Serialize, ToSchema, ToResponse)]
