@@ -121,18 +121,20 @@ async fn header_makeup(
     ctrl: &mut FlowCtrl,
 ) -> ServiceResult<()> {
     // if "X-Enc" and "X-Session-PubKey" headers exist, make it into res headers as well
-    // get the url path and make into "X-Path" header
+    // get the url path and make into "X-Path" header for hpke response use
+    // the same region as user schema, if depot access is possible, path can be put there.
     if let Some(x_enc) = req.headers().get("X-Enc") {
         res.headers_mut().insert("X-Enc", x_enc.clone());
+
+        if let Some(x_session_pubkey) = req.headers().get("X-Session-PubKey") {
+            res.headers_mut().insert("X-Session-PubKey", x_session_pubkey.clone());
+        }
+        let path = req.uri().path().to_string();
+        res.headers_mut().insert(
+            "X-Path",
+            HeaderValue::from_str(&path).unwrap_or_else(|_| HeaderValue::from_static("")),
+        );
     }
-    if let Some(x_session_pubkey) = req.headers().get("X-Session-PubKey") {
-        res.headers_mut().insert("X-Session-PubKey", x_session_pubkey.clone());
-    }
-    let path = req.uri().path().to_string();
-    res.headers_mut().insert(
-        "X-Path",
-        HeaderValue::from_str(&path).unwrap_or_else(|_| HeaderValue::from_static("")),
-    );
 
     ctrl.call_next(req, depot, res).await;
     Ok(())
