@@ -93,6 +93,8 @@ async fn jwt_to_user(
             };
             tracing::info!("Authorized. user:{}({})", user.username, user_id);
             depot.insert("user_schema", user.clone());
+            // if extract could access depot, then we can skip this step
+            // todo https://github.com/salvo-rs/salvo/pull/1268
             req.extensions_mut().insert(user.clone());
             ctrl.call_next(req, depot, res).await;
         }
@@ -127,10 +129,6 @@ async fn header_makeup(
         res.headers_mut().insert("X-Session-PubKey", x_session_pubkey.clone());
     }
     let path = req.uri().path().to_string();
-    // req.headers_mut().insert(
-    //     "X-Path",
-    //     HeaderValue::from_str(&path).unwrap_or_else(|_| HeaderValue::from_static("")),
-    // );
     res.headers_mut().insert(
         "X-Path",
         HeaderValue::from_str(&path).unwrap_or_else(|_| HeaderValue::from_static("")),
@@ -140,6 +138,9 @@ async fn header_makeup(
     Ok(())
 }
 
+// This middleware not works as expected due to body consumption issues.
+// commented out for now.
+/*
 // handle secure headers
 #[handler]
 async fn hpke(req: &mut Request, res: &mut Response, depot: &mut Depot, ctrl: &mut FlowCtrl) -> ServiceResult<()> {
@@ -201,3 +202,4 @@ async fn hpke(req: &mut Request, res: &mut Response, depot: &mut Depot, ctrl: &m
 
     Ok(())
 }
+ */

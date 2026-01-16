@@ -11,7 +11,7 @@ use salvo::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::types::UserSchema;
+use crate::{types::UserSchema, utils::hpke};
 
 /// HPKE JSON body extractor
 #[derive(ToSchema)]
@@ -27,51 +27,33 @@ where
     }
 
     async fn extract(req: &'ex mut Request) -> Result<Self, impl Writer + Send + fmt::Debug + 'static> {
-        let bytes = req
-            .payload()
-            .await
-            .map_err(|e| StatusError::bad_request().brief(e.to_string()))?
-            .to_vec();
-
-        let aad = req.uri().path().as_bytes().to_vec();
-        // let aad = req
-        //     .headers()
-        //     .get("X-Path")
-        //     .and_then(|v| v.to_str().ok())
-        //     .map(|s| s.as_bytes().to_vec())
-        //     .unwrap_or_default();
-        tracing::info!("HPKE[req]: AAD from X-Path header: {:?}", aad);
-        // tracing::info!("HPKE[req]: AAD from request path: {:?}", good_aad);
-        let final_bytes = if let Some(encapped_key) =
-            req.headers().get("X-Enc").and_then(|v| v.to_str().ok()).and_then(|e| {
-                let e_dec = base64::engine::general_purpose::STANDARD.decode(e).ok()?;
-                Some(e_dec)
-            }) {
+        let final_bytes = if let Some(encapped_key) = req.headers().get_base64("X-Enc") {
+            let bytes = req
+                .payload()
+                .await
+                .map_err(|e| StatusError::bad_request().brief(e.to_string()))?
+                .to_vec();
             tracing::info!("HPKE[req]: HPKE headers found, decrypting...");
             let user_schema = req
                 .extensions_mut()
                 .get::<UserSchema>()
                 .ok_or_else(|| StatusError::unauthorized().brief("user_schema not found"))?
                 .clone();
-
-            crate::utils::hpke::decrypt_data(&bytes, &encapped_key, &user_schema.secret_key, &aad)
-                .map_err(|e| StatusError::bad_request().brief(e.to_string()))?
+            let aad = req.uri().path().as_bytes().to_vec();
+            let decrypted_bytes = hpke::decrypt_data(&bytes, &encapped_key, &user_schema.secret_key, &aad)
+                .map_err(|e| StatusError::bad_request().brief(e.to_string()))?;
+            decrypted_bytes
         } else {
             tracing::info!("HPKE[req]: no HPKE headers found, treat as plain JSON");
-            bytes.to_vec()
+            req.payload()
+                .await
+                .map_err(|e| StatusError::bad_request().brief(e.to_string()))?
+                .to_vec()
         };
-
         let value = serde_json::from_slice(&final_bytes)
             .map_err(|e| StatusError::bad_request().brief(format!("invalid json body: {}", e)))?;
 
         Ok::<HpkeRequest<T>, StatusError>(HpkeRequest(value))
-    }
-
-    async fn extract_with_arg(
-        req: &'ex mut Request,
-        _arg: &str,
-    ) -> Result<Self, impl Writer + Send + fmt::Debug + 'static> {
-        Self::extract(req).await
     }
 }
 impl<'de, T> ToRequestBody for HpkeRequest<T>
@@ -123,17 +105,9 @@ where
         };
 
         // try get session pub key from header
-        let session_pubkey = res
-            .headers()
-            .get("X-Session-PubKey")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| base64::engine::general_purpose::STANDARD.decode(s).unwrap_or_default());
+        let session_pubkey = res.headers().get_base64("X-Session-PubKey");
         tracing::info!("HPKE[res]: session_pubkey from header: {:?}", session_pubkey);
-        let aad = res
-            .headers()
-            .get("X-Path")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.as_bytes().to_vec());
+        let aad = res.headers().get_bytes("X-Path");
         tracing::info!("HPKE[res]: aad from X-Path header: {:?}", aad);
 
         let (Some(session_pubkey), Some(aad)) = (session_pubkey, aad) else {
@@ -147,7 +121,7 @@ where
         };
 
         tracing::info!("HPKE[res]: HPKE headers found, encrypting response...");
-        let (encapped_key, ciphertext) = match crate::utils::hpke::encrypt_data(&plaintext, &session_pubkey, &aad) {
+        let (encapped_key, ciphertext) = match hpke::encrypt_data(&plaintext, &session_pubkey, &aad) {
             Ok(v) => v,
             Err(e) => {
                 tracing::error!(error = ?e, "HpkeJson encrypt failed");
@@ -156,13 +130,43 @@ where
             }
         };
 
-        res.headers_mut().insert(
-            "X-Enc",
-            HeaderValue::from_str(&base64::engine::general_purpose::STANDARD.encode(encapped_key)).unwrap(),
-        );
+        res.headers_mut().set_base64("X-Enc", &encapped_key);
         res.headers_mut()
             .insert(CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
 
         res.replace_body(ciphertext.into());
+    }
+}
+
+// define a header helper trait
+trait HeaderExt {
+    fn get_bytes(&self, name: impl AsRef<str>) -> Option<Vec<u8>>;
+    // fn set_bytes(&mut self, name: &'static str, value: &[u8]);
+    fn get_base64(&self, name: impl AsRef<str>) -> Option<Vec<u8>>;
+    fn set_base64(&mut self, name: &'static str, value: &[u8]);
+}
+
+impl HeaderExt for salvo::http::HeaderMap {
+    fn get_bytes(&self, name: impl AsRef<str>) -> Option<Vec<u8>> {
+        self.get(name.as_ref())
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.as_bytes().to_vec())
+    }
+    // fn set_bytes(&mut self, name: &'static str, value: &[u8]) {
+    //     if let Ok(hv) = HeaderValue::from_bytes(value) {
+    //         self.insert(name, hv);
+    //     }
+    // }
+    fn get_base64(&self, name: impl AsRef<str>) -> Option<Vec<u8>> {
+        self.get(name.as_ref())
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| base64::engine::general_purpose::STANDARD.decode(s).ok())
+    }
+
+    fn set_base64(&mut self, name: &'static str, value: &[u8]) {
+        let b64 = base64::engine::general_purpose::STANDARD.encode(value);
+        if let Ok(hv) = HeaderValue::from_str(&b64) {
+            self.insert(name, hv);
+        }
     }
 }
