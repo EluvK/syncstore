@@ -9,4 +9,4 @@ jwt.access_secret = "your_access_secret"
 jwt.refresh_secret = "your_refresh_secret"
 
 [store_config]
-directory = "./db_test"
+directory = "./whatever"

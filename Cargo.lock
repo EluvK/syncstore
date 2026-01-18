@@ -543,6 +543,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ececcb659e7ba858fb4f10388c250a7252eb0a27373f1a72b8748afdd248e587"
 dependencies = [
  "powerfmt",
+ "serde_core",
 ]
 
 [[package]]
@@ -1013,6 +1014,12 @@ checksum = "54b4a22553d4242c49fddb9ba998a99962b5cc6f22cb5a3482bec22522403ce4"
 dependencies = [
  "http",
 ]
+
+[[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hkdf"
@@ -1742,6 +1749,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "path-slash"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e91099d4268b0e11973f036e885d652fb0b21fedcf69738c627f94db6a44f42"
+
+[[package]]
 name = "pem"
 version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2449,6 +2462,7 @@ dependencies = [
  "salvo-jwt-auth",
  "salvo-oapi",
  "salvo-proxy",
+ "salvo-serve-static",
  "salvo_core",
  "salvo_extra",
 ]
@@ -2550,6 +2564,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.110",
+]
+
+[[package]]
+name = "salvo-serve-static"
+version = "0.84.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faca6f3a87a86fc208f2c4c524e5e494f33ee4343f6c03bc1818cc66b3d7ebd7"
+dependencies = [
+ "hex",
+ "mime",
+ "mime-infer",
+ "path-slash",
+ "percent-encoding",
+ "rust-embed",
+ "salvo_core",
+ "serde",
+ "serde_json",
+ "time",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2937,6 +2971,7 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
+ "time",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
