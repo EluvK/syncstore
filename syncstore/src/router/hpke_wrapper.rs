@@ -40,9 +40,8 @@ where
                 .ok_or_else(|| StatusError::unauthorized().brief("user_schema not found"))?
                 .clone();
             let aad = req.uri().path().as_bytes().to_vec();
-            let decrypted_bytes = hpke::decrypt_data(&bytes, &encapped_key, &user_schema.secret_key, &aad)
-                .map_err(|e| StatusError::bad_request().brief(e.to_string()))?;
-            decrypted_bytes
+            hpke::decrypt_data(&bytes, &encapped_key, &user_schema.secret_key, &aad)
+                .map_err(|e| StatusError::bad_request().brief(e.to_string()))?
         } else {
             tracing::info!("HPKE[req]: no HPKE headers found, treat as plain JSON");
             req.payload()

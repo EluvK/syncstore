@@ -9,10 +9,9 @@ mod user;
 
 use std::sync::Arc;
 
-use base64::Engine;
 use salvo::{
     Depot, FlowCtrl, Request, Response, Router, affix_state, handler,
-    http::{HeaderValue, ResBody},
+    http::HeaderValue,
     jwt_auth::{ConstDecoder, HeaderFinder, QueryFinder},
     oapi::{RouterExt, SecurityRequirement},
     prelude::{JwtAuth, JwtAuthDepotExt, JwtAuthState},
@@ -22,7 +21,6 @@ use crate::{
     config::ServiceConfig,
     error::{ServiceError, ServiceResult},
     store::Store,
-    types::UserSchema,
     utils::jwt::JwtClaims,
 };
 
