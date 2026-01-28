@@ -16,7 +16,7 @@ use crate::types::{AccessLevel, DataItem, DataItemDocument, Id, PermissionSchema
 mod checker {
     use std::sync::Arc;
 
-    use jsonschema::{Keyword, paths::Location};
+    use jsonschema::Keyword;
     use r2d2::Pool;
     use r2d2_sqlite::{
         SqliteConnectionManager,
@@ -38,15 +38,8 @@ mod checker {
     }
 
     impl Keyword for XParentId {
-        fn validate<'i>(
-            &self,
-            instance: &'i serde_json::Value,
-            location: &jsonschema::paths::LazyLocation,
-        ) -> Result<(), jsonschema::ValidationError<'i>> {
-            let location: Location = (&location.clone()).into();
-
-            let msg_err =
-                |msg: String| jsonschema::ValidationError::custom(location.clone(), location.clone(), instance, msg);
+        fn validate<'i>(&self, instance: &'i serde_json::Value) -> Result<(), jsonschema::ValidationError<'i>> {
+            let msg_err = |msg: String| jsonschema::ValidationError::custom(msg);
 
             tracing::info!(
                 "x_parent[validate] current self addr {:?} current instance: {:?}",
@@ -258,14 +251,8 @@ impl SqliteBackend {
         ) -> Result<Box<dyn jsonschema::Keyword>, Box<jsonschema::ValidationError<'a>>> {
             tracing::info!("more: value: {value:?}");
             tracing::info!("more: _parent: {:?}", _parent);
-            let meta = serde_json::from_value(value.clone()).map_err(|e| {
-                jsonschema::ValidationError::custom(
-                    _path.clone(),
-                    _path.clone(),
-                    value,
-                    format!("x-parents: invalid meta format: {}", e),
-                )
-            })?;
+            let meta = serde_json::from_value(value.clone())
+                .map_err(|e| jsonschema::ValidationError::custom(format!("x-parents: invalid meta format: {}", e)))?;
             tracing::info!("create parent check meta: {:?}", meta);
             Ok(Box::new(checker::XParentId {
                 pool: pool.clone(),

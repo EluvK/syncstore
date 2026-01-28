@@ -121,7 +121,7 @@ impl DataSchemasBuilder {
 ///     .build();
 ///
 /// // Access the backend for the in-memory namespace
-/// let backend = manager.backend_for(":memory:").unwrap();
+/// // let backend = manager.backend_for(":memory:").unwrap();
 /// ```
 #[macro_export]
 macro_rules! collection {

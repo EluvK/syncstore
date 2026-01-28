@@ -2,7 +2,7 @@ use std::fmt;
 
 use base64::Engine;
 use salvo::{
-    Extractible, Request, Response, Scribe, Writer, async_trait,
+    Depot, Extractible, Request, Response, Scribe, Writer, async_trait,
     extract::Metadata,
     http::{HeaderValue, StatusError, header::CONTENT_TYPE},
     oapi::{
@@ -26,24 +26,34 @@ where
         &METADATA
     }
 
-    async fn extract(req: &'ex mut Request) -> Result<Self, impl Writer + Send + fmt::Debug + 'static> {
-        let final_bytes = if let Some(encapped_key) = req.headers().get_base64("X-Enc") {
+    async fn extract(
+        req: &'ex mut Request,
+        depot: &'ex mut Depot,
+    ) -> Result<Self, impl Writer + Send + fmt::Debug + 'static> {
+        let final_bytes = if let Some(encapped_key) = depot
+            .get::<HeaderValue>("X-Enc")
+            .ok()
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| base64::engine::general_purpose::STANDARD.decode(s).ok())
+        {
             let bytes = req
                 .payload()
                 .await
                 .map_err(|e| StatusError::bad_request().brief(e.to_string()))?
                 .to_vec();
-            tracing::info!("HPKE[req]: HPKE headers found, decrypting...");
-            let user_schema = req
-                .extensions_mut()
-                .get::<UserSchema>()
-                .ok_or_else(|| StatusError::unauthorized().brief("user_schema not found"))?
-                .clone();
-            let aad = req.uri().path().as_bytes().to_vec();
+            tracing::info!("HPKE[extract req]: HPKE X-Enc depot found, decrypting...");
+            let user_schema = depot
+                .get::<UserSchema>("user_schema")
+                .map_err(|_| StatusError::unauthorized().brief("user_schema not found in depot"))?;
+            let aad = depot
+                .get::<String>("X-Path")
+                .map_err(|_| StatusError::bad_request().brief("X-Path not found in depot"))?
+                .as_bytes()
+                .to_vec();
             hpke::decrypt_data(&bytes, &encapped_key, &user_schema.secret_key, &aad)
                 .map_err(|e| StatusError::bad_request().brief(e.to_string()))?
         } else {
-            tracing::info!("HPKE[req]: no HPKE headers found, treat as plain JSON");
+            tracing::info!("HPKE[extract req]: no X-Enc depot found, treat as plain JSON");
             req.payload()
                 .await
                 .map_err(|e| StatusError::bad_request().brief(e.to_string()))?
@@ -104,12 +114,10 @@ where
         };
 
         // try get session pub key from header
-        let session_pubkey = res.headers().get_base64("X-Session-PubKey");
-        tracing::info!("HPKE[res]: session_pubkey from header: {:?}", session_pubkey);
-        let aad = res.headers().get_bytes("X-Path");
-        tracing::info!("HPKE[res]: aad from X-Path header: {:?}", aad);
-
-        let (Some(session_pubkey), Some(aad)) = (session_pubkey, aad) else {
+        let (Some(session_pubkey), Some(aad)) = (
+            res.headers().get_base64("X-Session-PubKey"),
+            res.headers().get_bytes("X-Path"),
+        ) else {
             tracing::info!("HPKE[res]: no HPKE response key found, treat as plain JSON");
             res.headers_mut().insert(
                 CONTENT_TYPE,
@@ -118,8 +126,10 @@ where
             let _ = res.write_body(plaintext);
             return;
         };
-
         tracing::info!("HPKE[res]: HPKE headers found, encrypting response...");
+        tracing::info!("HPKE[res]: session_pubkey from header: {:?}", session_pubkey);
+        tracing::info!("HPKE[res]: aad from X-Path header: {:?}", aad);
+
         let (encapped_key, ciphertext) = match hpke::encrypt_data(&plaintext, &session_pubkey, &aad) {
             Ok(v) => v,
             Err(e) => {

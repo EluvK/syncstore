@@ -91,9 +91,11 @@ async fn jwt_to_user(
             };
             tracing::info!("Authorized. user:{}({})", user.username, user_id);
             depot.insert("user_schema", user.clone());
-            // if extract could access depot, then we can skip this step
-            // todo https://github.com/salvo-rs/salvo/pull/1268
-            req.extensions_mut().insert(user.clone());
+            if let Some(x_enc) = req.headers().get("X-Enc") {
+                depot.insert("X-Enc", x_enc.clone());
+            }
+            depot.insert("X-Path", req.uri().path().to_string());
+
             ctrl.call_next(req, depot, res).await;
         }
         (_, _, Some(jwt_error)) => {
@@ -120,13 +122,11 @@ async fn header_makeup(
 ) -> ServiceResult<()> {
     // if "X-Enc" and "X-Session-PubKey" headers exist, make it into res headers as well
     // get the url path and make into "X-Path" header for hpke response use
-    // the same region as user schema, if depot access is possible, path can be put there.
-    if let Some(x_enc) = req.headers().get("X-Enc") {
+    if let Some(x_enc) = req.headers().get("X-Enc")
+        && let Some(x_session_pubkey) = req.headers().get("X-Session-PubKey")
+    {
         res.headers_mut().insert("X-Enc", x_enc.clone());
-
-        if let Some(x_session_pubkey) = req.headers().get("X-Session-PubKey") {
-            res.headers_mut().insert("X-Session-PubKey", x_session_pubkey.clone());
-        }
+        res.headers_mut().insert("X-Session-PubKey", x_session_pubkey.clone());
         let path = req.uri().path().to_string();
         res.headers_mut().insert(
             "X-Path",

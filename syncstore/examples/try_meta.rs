@@ -1,4 +1,4 @@
-use jsonschema::paths::{LazyLocation, Location};
+#![allow(unused)]
 use jsonschema::{Keyword, ValidationError, ValidationOptions};
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
@@ -24,24 +24,24 @@ struct DbExists {
 }
 
 impl Keyword for DbExists {
-    fn validate<'i>(&self, instance: &'i Value, location: &LazyLocation) -> Result<(), ValidationError<'i>> {
-        let location: Location = (&location.clone()).into();
+    fn validate<'i>(&self, instance: &'i Value) -> Result<(), ValidationError<'i>> {
+        // let location: Location = (&location.clone()).into();
         let val = match instance.as_str() {
             Some(v) => v,
             None => {
                 return Err(ValidationError::custom(
-                    location.clone(),
-                    location.clone(),
-                    instance,
+                    // location.clone(),
+                    // location.clone(),
+                    // instance,
                     "db_exists: expected string",
                 ));
             }
         };
         if !self.checker.check(val) {
             return Err(ValidationError::custom(
-                location.clone(),
-                location,
-                instance,
+                // location.clone(),
+                // location,
+                // instance,
                 format!("db_exists: value '{}' not found in {}.{}", val, self.table, self.column),
             ));
         }
