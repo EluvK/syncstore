@@ -51,7 +51,8 @@ async fn main() -> anyhow::Result<()> {
                 "content": { "type": "string" },
                 "post_id": { "type": "string" },
                 "parent_id": { "type": ["string", "null"] },
-                "paragraph_id": { "type": ["string", "null"] }
+                "paragraph_index": { "type": ["number", "null"] },
+                "paragraph_hash": { "type": ["string", "null"] }
             },
             "required": ["content", "post_id"],
             "x-parent-id": { "parent": "post", "field": "post_id" }
