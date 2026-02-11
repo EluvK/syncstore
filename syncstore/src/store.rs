@@ -94,7 +94,12 @@ impl Store {
                 )));
             };
             let parent_data = backend.get(parent_collection, &parent_id.to_string())?;
-            if !self.check_permission((namespace, parent_collection), &parent_data, user, ACLMask::CREATE_ONLY)? {
+            if !self.check_permission(
+                (namespace, parent_collection),
+                &parent_data,
+                user,
+                ACLMask::APPEND_1_BELOW,
+            )? {
                 return Err(StoreError::PermissionDenied);
             }
         }
@@ -200,7 +205,7 @@ impl Store {
         let backend = self.data_manager.backend_for(namespace)?;
         let data = backend.get(collection, id)?;
         // check permission
-        if !self.check_permission((namespace, collection), &data, user, ACLMask::DELETE)? {
+        if !self.check_permission((namespace, collection), &data, user, ACLMask::DELETE_ONLY)? {
             return Err(StoreError::PermissionDenied);
         }
         backend.delete(collection, id)
@@ -233,9 +238,10 @@ impl Store {
         let backend = self.data_manager.backend_for(namespace)?;
         if let Some(parent_id) = data.parent_id.as_ref()
             && let Some((parent_collection, _field)) = backend.parent_collection(collection)
+            && let Some(parent_needed_mask) = needed_mask.upgrade_for_parent()
         {
             let parent_data = backend.get(parent_collection, parent_id)?;
-            return self.check_permission((namespace, parent_collection), &parent_data, user, needed_mask);
+            return self.check_permission((namespace, parent_collection), &parent_data, user, parent_needed_mask);
         }
         Ok(false)
     }

@@ -57,11 +57,10 @@ impl BasicTestSuite {
                 "type": "object",
                 "properties": {
                     "name": { "type": "string" },
-                    "description": { "type": "string" },
+                    "description": { "type": ["string", "null"] },
                     "status": { "type": "string", "enum": ["normal", "deleted"] }
                 },
-                "required": ["name", "status"],
-                "x-unique": "name",
+                "required": ["name", "status"]
             }),
             "post" => json!({
                 "type": "object",
@@ -71,9 +70,21 @@ impl BasicTestSuite {
                     "content": { "type": "string" },
                     "repo_id": { "type": "string" }
                 },
-                "required": ["title", "repo_id"],
-                "x-parent-id": { "parent": "repo", "field": "repo_id" },
-            })
+                "required": ["title", "repo_id", "category", "content"],
+                "x-parent-id": { "parent": "repo", "field": "repo_id" }
+            }),
+            "comment" => json!({
+                "type": "object",
+                "properties": {
+                    "content": { "type": "string" },
+                    "post_id": { "type": "string" },
+                    "parent_id": { "type": ["string", "null"] },
+                    "paragraph_index": { "type": ["number", "null"] },
+                    "paragraph_hash": { "type": ["string", "null"] }
+                },
+                "required": ["content", "post_id"],
+                "x-parent-id": { "parent": "post", "field": "post_id" }
+            }),
         };
         let namespace = "example_ns".to_string();
         let store = Store::build(&tmp, vec![(&namespace, post_schemas)])?;

@@ -147,19 +147,22 @@ pub struct Permission {
     pub access_level: AccessLevel,
 }
 
-// you might want to update the `AclManager::new(), schema enums as well when modifying this.`
+/// This enum string will be stored in the database, so be sure to make compatible changes when modifying it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, salvo::oapi::ToSchema, salvo::oapi::ToResponse)]
 #[serde(rename_all = "snake_case")]
 pub enum AccessLevel {
     /// Can only read existing data.
     Read,
-    /// Can only update existing data, cannot create new data at all.
+    /// Can read and append data with parent-child relationship up to 1 level.
+    ReadAppend1,
+    /// Can read and append data with parent-child relationship up to 2 levels.
+    ReadAppend2,
+    /// Can read and append data with parent-child relationship up to 3 levels.
+    ReadAppend3,
+    /// Can read and update **existing** data(not really useful currently?).
     Update,
-    /// Can read and create new data as sibling, but cannot update existing data.
-    Create,
-    /// Can read, create new data and update existing data. Cannot delete.
+    /// Can read and create new data (anything but delete).
     Write,
-    /// Can do all operations, including delete.
     FullAccess,
 }
 
@@ -167,8 +170,10 @@ impl AccessLevel {
     pub fn to_string(&self) -> &'static str {
         match self {
             AccessLevel::Read => "read",
+            AccessLevel::ReadAppend1 => "read_append1",
+            AccessLevel::ReadAppend2 => "read_append2",
+            AccessLevel::ReadAppend3 => "read_append3",
             AccessLevel::Update => "update",
-            AccessLevel::Create => "create",
             AccessLevel::Write => "write",
             AccessLevel::FullAccess => "full_access",
         }
@@ -180,8 +185,10 @@ impl std::str::FromStr for AccessLevel {
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
             "read" => Ok(AccessLevel::Read),
+            "read_append1" => Ok(AccessLevel::ReadAppend1),
+            "read_append2" => Ok(AccessLevel::ReadAppend2),
+            "read_append3" => Ok(AccessLevel::ReadAppend3),
             "update" => Ok(AccessLevel::Update),
-            "create" => Ok(AccessLevel::Create),
             "write" => Ok(AccessLevel::Write),
             "full_access" => Ok(AccessLevel::FullAccess),
             _ => Err(StoreError::Validation(format!("Invalid access level string: {}", s))),
@@ -197,13 +204,33 @@ pub struct PermissionSchema {
 }
 
 bitflags::bitflags! {
+    // ACLMask used internally for permission checking, it corresponds to CRUD operations.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct ACLMask: u8 {
-        const READ_ONLY   = 0b00001;
-        const UPDATE_ONLY = 0b00010;
-        const CREATE_ONLY = 0b00100;
-        const DELETE      = 0b01000;
-        const FULL_ACCESS = 0b01111;
+        const READ_ONLY      = 0b000001;
+        const UPDATE_ONLY    = 0b000010;
+        const DELETE_ONLY    = 0b000100;
+        const APPEND_3_BELOW = 0b001000;
+        const APPEND_2_BELOW = 0b011000;
+        const APPEND_1_BELOW = 0b111000;
+        const FULL_ACCESS    = 0b111111;
+    }
+}
+
+impl ACLMask {
+    pub fn upgrade_for_parent(self) -> Option<Self> {
+        let current_append_bits = self & ACLMask::APPEND_1_BELOW;
+        if current_append_bits.is_empty() {
+            return Some(self);
+        }
+        let next_append_bits = match current_append_bits {
+            ACLMask::APPEND_1_BELOW => Some(ACLMask::APPEND_2_BELOW),
+            ACLMask::APPEND_2_BELOW => Some(ACLMask::APPEND_3_BELOW),
+            ACLMask::APPEND_3_BELOW => None,
+            // should not happen, as we already return Some(self) if no append bits
+            _ => panic!("Invalid ACLMask for append levels"),
+        };
+        next_append_bits.map(|next_append_bits| (self - current_append_bits) | next_append_bits)
     }
 }
 
@@ -211,10 +238,48 @@ impl From<AccessLevel> for ACLMask {
     fn from(level: AccessLevel) -> Self {
         match level {
             AccessLevel::Read => ACLMask::READ_ONLY,
+            AccessLevel::ReadAppend1 => ACLMask::READ_ONLY | ACLMask::APPEND_1_BELOW,
+            AccessLevel::ReadAppend2 => ACLMask::READ_ONLY | ACLMask::APPEND_2_BELOW,
+            AccessLevel::ReadAppend3 => ACLMask::READ_ONLY | ACLMask::APPEND_3_BELOW,
             AccessLevel::Update => ACLMask::READ_ONLY | ACLMask::UPDATE_ONLY,
-            AccessLevel::Create => ACLMask::READ_ONLY | ACLMask::CREATE_ONLY,
-            AccessLevel::Write => ACLMask::READ_ONLY | ACLMask::UPDATE_ONLY | ACLMask::CREATE_ONLY,
+            AccessLevel::Write => ACLMask::READ_ONLY | ACLMask::UPDATE_ONLY | ACLMask::APPEND_1_BELOW,
             AccessLevel::FullAccess => ACLMask::FULL_ACCESS,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_upgrade_for_parent_progression() {
+        let level1 = ACLMask::READ_ONLY | ACLMask::APPEND_1_BELOW;
+        let level2 = level1.upgrade_for_parent().expect("Should transition to level 2");
+        assert_eq!(level2, ACLMask::READ_ONLY | ACLMask::APPEND_2_BELOW);
+
+        let level3 = level2.upgrade_for_parent().expect("Should transition to level 3");
+        assert_eq!(level3, ACLMask::READ_ONLY | ACLMask::APPEND_3_BELOW);
+
+        let level_none = level3.upgrade_for_parent();
+        assert!(level_none.is_none(), "Level 3 should have no further levels");
+    }
+
+    #[test]
+    fn test_upgrade_for_parent_preserves_other_bits() {
+        let complex_mask = ACLMask::READ_ONLY | ACLMask::UPDATE_ONLY | ACLMask::APPEND_1_BELOW;
+        let next = complex_mask.upgrade_for_parent().unwrap();
+
+        assert!(next.contains(ACLMask::READ_ONLY));
+        assert!(next.contains(ACLMask::UPDATE_ONLY));
+        assert!(next.contains(ACLMask::APPEND_2_BELOW));
+        assert!(!next.contains(ACLMask::APPEND_1_BELOW));
+    }
+
+    #[test]
+    fn test_upgrade_for_parent_no_append_bits() {
+        let read_only = ACLMask::READ_ONLY;
+        let next = read_only.upgrade_for_parent().unwrap();
+        assert_eq!(next, ACLMask::READ_ONLY);
     }
 }

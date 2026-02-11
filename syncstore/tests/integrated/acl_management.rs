@@ -214,7 +214,7 @@ fn grant_update_can_read_and_update() -> Result<(), Box<dyn std::error::Error>> 
 }
 
 #[test]
-fn grant_create_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> {
+fn grant_append_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> {
     let s = BasicTestSuite::new()?;
 
     let store = s.store.clone();
@@ -227,8 +227,8 @@ fn grant_create_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> 
         json!({ "name": "Create Repo", "description": "Repository for create ACL test", "status": "normal" });
     let repo_id = store.insert(namespace, "repo", &repo_doc, user1)?;
 
-    // user1 grants user2 create access to the repo
-    let acl = gen_acl(&repo_id, user2, AccessLevel::Create);
+    // user1 grants user2 append access to the repo
+    let acl = gen_acl(&repo_id, user2, AccessLevel::ReadAppend1);
     store.update_acl((namespace, "repo"), acl, user1)?;
 
     // user1 put a post under the repo to test parent permission check
@@ -260,6 +260,13 @@ fn grant_create_can_read_and_create() -> Result<(), Box<dyn std::error::Error>> 
     let new_post_item = store.get(namespace, "post", &new_post_id, user2)?;
     assert_eq!(new_post_item.body["title"], "Post by user2");
     assert_eq!(new_post_item.owner, *user2);
+
+    // user2 can add comment under the post
+    let comment_doc = json!({ "content": "This is a comment by user2.", "post_id": post_id });
+    let comment_id = store.insert(namespace, "comment", &comment_doc, user2)?;
+    let comment_item = store.get(namespace, "comment", &comment_id, user2)?;
+    assert_eq!(comment_item.body["content"], "This is a comment by user2.");
+    assert_eq!(comment_item.owner, *user2);
 
     // user2 cannot delete the repo
     assert_permission_denied(store.delete(namespace, "repo", &repo_id, user2));
