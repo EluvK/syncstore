@@ -1,0 +1,42 @@
+# .github/workflows/release.yml
+name: Release
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v[0-9]+.*"
+
+jobs:
+  build-and-release:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build binary
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/xss dist/
+          cp target/${{ matrix.target }}/release/db_convert dist/
+          cp -r xss/scripts dist/
+          cp xss/config.toml dist/
+          cd dist && tar -czvf ../xss-${{ matrix.target }}.tar.gz .
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.XSS_GITHUB_TOKEN }}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && 'nightly' || github.ref_name }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' }}
+          files: xss-${{ matrix.target }}.tar.gz
+          generate_release_notes: true
+          make_latest: ${{ github.event_name != 'workflow_dispatch' }}

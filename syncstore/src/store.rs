@@ -275,16 +275,15 @@ impl Store {
         data_id: &str,
         user: &str,
     ) -> StoreResult<AccessControl> {
-        let data = self.get(namespace, collection, &data_id.to_string(), user)?;
-        if data.owner != user {
-            return Err(StoreError::PermissionDenied);
-        }
         let backend = self.data_manager.backend_for(namespace)?;
         let permissions = backend.get_data_permissions(collection, data_id)?;
+        let data = self.get(namespace, collection, &data_id.to_string(), user)?;
         Ok(AccessControl {
             data_id: data_id.to_string(),
             permissions: permissions
                 .into_iter()
+                // only return permissions that the user has access to, either by ownership or direct ACL
+                .filter(|schema| data.owner == user || schema.user_id == user)
                 .map(|schema| Permission {
                     user: schema.user_id,
                     access_level: schema.access_level,
