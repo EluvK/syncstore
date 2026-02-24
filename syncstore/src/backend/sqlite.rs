@@ -41,11 +41,11 @@ mod checker {
         fn validate<'i>(&self, instance: &'i serde_json::Value) -> Result<(), jsonschema::ValidationError<'i>> {
             let msg_err = |msg: String| jsonschema::ValidationError::custom(msg);
 
-            tracing::info!(
-                "x_parent[validate] current self addr {:?} current instance: {:?}",
-                std::ptr::addr_of!(self),
-                instance
-            );
+            // tracing::info!(
+            //     "x_parent[validate] current self addr {:?} current instance: {:?}",
+            //     std::ptr::addr_of!(self),
+            //     instance
+            // );
             let m = &self.meta;
             tracing::info!("x_parent[validate] check meta: {:?}", m);
             let Some(value) = instance.get(&m.field).and_then(|f| f.as_str()) else {

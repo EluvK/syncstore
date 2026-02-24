@@ -1,6 +1,7 @@
 use std::fmt;
 
 use base64::Engine;
+use http_body_util::BodyExt;
 use salvo::{
     Depot, Extractible, Request, Response, Scribe, Writer, async_trait,
     extract::Metadata,
@@ -37,10 +38,11 @@ where
             .and_then(|s| base64::engine::general_purpose::STANDARD.decode(s).ok())
         {
             let bytes = req
-                .payload()
+                .take_body()
+                .collect()
                 .await
                 .map_err(|e| StatusError::bad_request().brief(e.to_string()))?
-                .to_vec();
+                .to_bytes();
             tracing::info!("HPKE[extract req]: HPKE X-Enc depot found, decrypting...");
             let user_schema = depot
                 .get::<UserSchema>("user_schema")
@@ -50,6 +52,7 @@ where
                 .map_err(|_| StatusError::bad_request().brief("X-Path not found in depot"))?
                 .as_bytes()
                 .to_vec();
+            // tracing::info!("bytes: len={}", bytes.len());
             hpke::decrypt_data(&bytes, &encapped_key, &user_schema.secret_key, &aad)
                 .map_err(|e| StatusError::bad_request().brief(e.to_string()))?
         } else {
@@ -127,8 +130,8 @@ where
             return;
         };
         tracing::info!("HPKE[res]: HPKE headers found, encrypting response...");
-        tracing::info!("HPKE[res]: session_pubkey from header: {:?}", session_pubkey);
-        tracing::info!("HPKE[res]: aad from X-Path header: {:?}", aad);
+        // tracing::info!("HPKE[res]: session_pubkey from header: {:?}", session_pubkey);
+        // tracing::info!("HPKE[res]: aad from X-Path header: {:?}", aad);
 
         let (encapped_key, ciphertext) = match hpke::encrypt_data(&plaintext, &session_pubkey, &aad) {
             Ok(v) => v,

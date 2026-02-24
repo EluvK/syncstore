@@ -20,6 +20,7 @@ use crate::{
 
 pub fn create_router() -> Router {
     Router::with_path("{namespace}/{collection}")
+        .hoop(super::chunk_data_wrapper::check_chunk)
         .push(Router::new().post(create_data).get(list_data))
         .push(
             Router::with_path("{id}")

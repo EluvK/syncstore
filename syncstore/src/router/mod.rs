@@ -1,6 +1,7 @@
 mod acl;
 mod admin;
 mod auth;
+mod chunk_data_wrapper;
 mod data;
 mod fs;
 mod health;
@@ -9,6 +10,7 @@ mod user;
 
 use std::sync::Arc;
 
+use dashmap::DashMap;
 use salvo::{
     Depot, FlowCtrl, Request, Response, Router, affix_state, handler,
     http::HeaderValue,
@@ -48,8 +50,10 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
         .push(Router::with_path("fs").push(fs::create_router()))
         .push(Router::with_path("user").push(user::create_router()))
         .oapi_security(SecurityRequirement::new("bearer", vec!["bearer"]));
+    let chunk_status: DashMap<String, chunk_data_wrapper::UploadStatus> = DashMap::new();
     Router::new()
         .hoop(affix_state::inject(store))
+        .hoop(affix_state::inject(Arc::new(chunk_status)))
         .push(auth_router)
         .push(non_auth_router)
 }
