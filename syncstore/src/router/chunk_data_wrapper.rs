@@ -83,13 +83,14 @@ pub async fn check_chunk(
             req.replace_body(salvo::http::ReqBody::Once(final_data.into()));
 
             ctrl.call_next(req, depot, res).await;
+            return Ok(());
         } else {
             res.status_code(salvo::http::StatusCode::ACCEPTED);
             ctrl.skip_rest();
+            return Ok(());
         }
-    } else {
-        tracing::info!("Not a chunk upload request, continue normal processing");
-    };
+    }
+    tracing::info!("Not a chunk upload request, continue normal processing");
     ctrl.call_next(req, depot, res).await;
     Ok(())
 }
