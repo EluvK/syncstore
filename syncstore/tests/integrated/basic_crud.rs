@@ -168,3 +168,32 @@ fn validate_child_parent_data() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn list_with_permission_includes_children_of_owned_parent() -> Result<(), Box<dyn std::error::Error>> {
+    let s = BasicTestSuite::new()?;
+
+    let store = s.store.clone();
+    let namespace = &s.namespace;
+    let user = &s.user1_id;
+
+    let repo_doc = json!({
+        "name": "Parent Repo",
+        "description": "Repo that owns posts",
+        "status": "normal"
+    });
+    let repo_id = store.insert(namespace, "repo", &repo_doc, user)?;
+
+    let post_doc = json!({
+        "title": "Owned Post",
+        "category": "general",
+        "content": "This post belongs to the owned repo.",
+        "repo_id": repo_id
+    });
+    let post_id = store.insert(namespace, "post", &post_doc, user)?;
+
+    let (items, _) = store.list_with_permission(namespace, "post", None, 10, user)?;
+    assert!(items.iter().any(|item| item.id == post_id));
+
+    Ok(())
+}

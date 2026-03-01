@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{collections::{BTreeSet, HashMap, HashSet}, sync::Arc};
 
 use serde_json::Value;
 
-use crate::backend::Backend;
+use crate::backend::{Backend, SqliteBackend};
 use crate::components::{DataManager, DataManagerBuilder, DataSchemas, UserManager};
 use crate::error::{StoreError, StoreResult};
 use crate::types::{ACLMask, AccessControl, DataItem, Id, Permission, PermissionSchema, UserSchema};
@@ -152,24 +152,120 @@ impl Store {
         limit: usize,
         user: &str,
     ) -> StoreResult<(Vec<DataItem>, Option<String>)> {
+        if limit == 0 {
+            return Ok((Vec::new(), None));
+        }
         let backend = self.data_manager.backend_for(namespace)?;
-        let permissions = backend.get_user_permissions(collection, user)?;
-        let mut all_items = Vec::new();
+        let mut cache: HashMap<(String, String), DataItem> = HashMap::new();
+        let mut visited = HashSet::new();
+        let accessible_ids = self.collect_all_accessible_ids(namespace, collection, user, &mut visited, &mut cache)?;
+        if accessible_ids.is_empty() {
+            return Ok((Vec::new(), None));
+        }
+        let ids: Vec<String> = accessible_ids.into_iter().collect();
+        let start_index = marker
+            .as_ref()
+            .map(|marker| ids.iter().position(|id| id >= marker).unwrap_or(ids.len()))
+            .unwrap_or(0);
+        let mut items = Vec::new();
         let mut next_marker = None;
-        for perm in permissions {
-            if let Some(marker) = &marker
-                && &perm.data_id != marker
-            {
-                continue;
-            }
-            let data = backend.get(collection, &perm.data_id)?;
-            if all_items.len() >= limit {
-                next_marker = Some(data.id.clone());
+        let collection_key = collection.to_string();
+        for id in ids.iter().skip(start_index) {
+            if items.len() == limit {
+                next_marker = Some(id.clone());
                 break;
             }
-            all_items.push(data);
+            let key = (collection_key.clone(), id.clone());
+            let data = if let Some(cached) = cache.remove(&key) {
+                cached
+            } else {
+                backend.get(collection, id)?
+            };
+            items.push(data);
         }
-        Ok((all_items, next_marker))
+        Ok((items, next_marker))
+    }
+
+    const PERMISSION_PAGE_SIZE: usize = 128;
+
+    fn collect_all_owner_items(
+        &self,
+        backend: &Arc<SqliteBackend>,
+        collection: &str,
+        user: &str,
+    ) -> StoreResult<Vec<DataItem>> {
+        let mut items = Vec::new();
+        let mut marker = None;
+        loop {
+            let (page, next_marker) = backend.list_by_owner(collection, user, marker.clone(), Self::PERMISSION_PAGE_SIZE)?;
+            items.extend(page);
+            if next_marker.is_none() {
+                break;
+            }
+            marker = next_marker;
+        }
+        Ok(items)
+    }
+
+    fn collect_all_children_items(
+        &self,
+        backend: &Arc<SqliteBackend>,
+        collection: &str,
+        parent_id: &str,
+    ) -> StoreResult<Vec<DataItem>> {
+        let mut items = Vec::new();
+        let mut marker = None;
+        loop {
+            let (page, next_marker) = backend.list_children(collection, parent_id, marker.clone(), Self::PERMISSION_PAGE_SIZE)?;
+            items.extend(page);
+            if next_marker.is_none() {
+                break;
+            }
+            marker = next_marker;
+        }
+        Ok(items)
+    }
+
+    fn collect_all_accessible_ids(
+        &self,
+        namespace: &str,
+        collection: &str,
+        user: &str,
+        visited: &mut HashSet<(String, String)>,
+        cache: &mut HashMap<(String, String), DataItem>,
+    ) -> StoreResult<BTreeSet<String>> {
+        let key = (namespace.to_string(), collection.to_string());
+        if !visited.insert(key.clone()) {
+            return Ok(BTreeSet::new());
+        }
+        let result = (|| -> StoreResult<BTreeSet<String>> {
+            let backend = self.data_manager.backend_for(namespace)?;
+            let mut ids = BTreeSet::new();
+            let collection_key = collection.to_string();
+            let owner_items = self.collect_all_owner_items(&backend, collection, user)?;
+            for item in owner_items {
+                let item_id = item.id.clone();
+                ids.insert(item_id.clone());
+                cache.insert((collection_key.clone(), item_id), item);
+            }
+            for perm in backend.get_user_permissions(collection, user)? {
+                ids.insert(perm.data_id);
+            }
+            if let Some((parent_collection, _)) = backend.parent_collection(collection) {
+                let parent_ids = self.collect_all_accessible_ids(namespace, parent_collection, user, visited, cache)?;
+                for parent_id in parent_ids {
+                    let children = self.collect_all_children_items(&backend, collection, &parent_id)?;
+                    for child in children {
+                        let child_id = child.id.clone();
+                        ids.insert(child_id.clone());
+                        cache.insert((collection_key.clone(), child_id), child);
+                    }
+                }
+            }
+            Ok(ids)
+        })();
+        visited.remove(&key);
+        result
     }
 
     pub fn get(&self, namespace: &str, collection: &str, id: &Id, user: &str) -> StoreResult<DataItem> {
