@@ -26,6 +26,9 @@ pub type StoreResult<T> = std::result::Result<T, StoreError>;
 
 #[derive(Error, Debug)]
 pub enum ServiceError {
+    #[error("Request error: {0}")]
+    RequestError(String),
+
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
 
@@ -53,6 +56,9 @@ impl Scribe for ServiceError {
     fn render(self, res: &mut salvo::Response) {
         res.render(format!("{self}"));
         match self {
+            ServiceError::RequestError(_) => {
+                res.status_code(StatusCode::BAD_REQUEST);
+            }
             ServiceError::Unauthorized(_) => {
                 res.status_code(StatusCode::UNAUTHORIZED);
             }

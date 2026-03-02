@@ -1,4 +1,7 @@
-use std::{collections::{BTreeSet, HashMap, HashSet}, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    sync::Arc,
+};
 
 use serde_json::Value;
 
@@ -158,7 +161,30 @@ impl Store {
         let backend = self.data_manager.backend_for(namespace)?;
         let mut cache: HashMap<(String, String), DataItem> = HashMap::new();
         let mut visited = HashSet::new();
+        // should timer this function.
+        // simple test result:
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `repo`: 5 ids, took 302.7µs
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `post`: 144 ids, took 5.1253ms
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `post`: 144 ids, took 4.2815ms
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `post`: 144 ids, took 4.3624ms
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `comment`: 431 ids, took 38.4758ms
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `comment`: 431 ids, took 35.5243ms
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `comment`: 431 ids, took 36.1971ms
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `comment`: 431 ids, took 36.9126ms
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `comment`: 431 ids, took 35.7113ms
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `comment`: 431 ids, took 36.9658ms
+        // Collected accessible ids for user `fa80f200-8fba-428f-8dda-c44b946f144e` in collection `comment`: 431 ids, took 68.3684ms
+        // todo 400 data item toke around 40ms, seems unacceptable, need to optimize the permission check logic, maybe cache the accessible ids for each user and collection, and invalidate the cache when ACL updated.
+        let start_time = std::time::Instant::now();
         let accessible_ids = self.collect_all_accessible_ids(namespace, collection, user, &mut visited, &mut cache)?;
+        let duration = start_time.elapsed();
+        tracing::info!(
+            "Collected accessible ids for user `{}` in collection `{}`: {} ids, took {:?}",
+            user,
+            collection,
+            accessible_ids.len(),
+            duration
+        );
         if accessible_ids.is_empty() {
             return Ok((Vec::new(), None));
         }
@@ -197,7 +223,8 @@ impl Store {
         let mut items = Vec::new();
         let mut marker = None;
         loop {
-            let (page, next_marker) = backend.list_by_owner(collection, user, marker.clone(), Self::PERMISSION_PAGE_SIZE)?;
+            let (page, next_marker) =
+                backend.list_by_owner(collection, user, marker.clone(), Self::PERMISSION_PAGE_SIZE)?;
             items.extend(page);
             if next_marker.is_none() {
                 break;
@@ -216,7 +243,8 @@ impl Store {
         let mut items = Vec::new();
         let mut marker = None;
         loop {
-            let (page, next_marker) = backend.list_children(collection, parent_id, marker.clone(), Self::PERMISSION_PAGE_SIZE)?;
+            let (page, next_marker) =
+                backend.list_children(collection, parent_id, marker.clone(), Self::PERMISSION_PAGE_SIZE)?;
             items.extend(page);
             if next_marker.is_none() {
                 break;

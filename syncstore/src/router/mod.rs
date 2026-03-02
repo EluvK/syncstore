@@ -46,7 +46,8 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
         // .hoop(hpke)
         .push(Router::with_path("acl").push(acl::create_router()))
         .push(Router::with_path("auth").push(auth::create_router()))
-        .push(Router::with_path("data").push(data::create_router()))
+        .push(Router::with_path("data").push(data::create_data_router()))
+        .push(Router::with_path("batch-data").push(data::create_batch_data_router()))
         .push(Router::with_path("fs").push(fs::create_router()))
         .push(Router::with_path("user").push(user::create_router()))
         .oapi_security(SecurityRequirement::new("bearer", vec!["bearer"]));
