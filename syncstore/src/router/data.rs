@@ -22,14 +22,108 @@ use crate::{
 pub fn create_batch_data_router() -> Router {
     Router::with_path("{namespace}/{collection}")
         .hoop(super::chunk_data_wrapper::check_chunk)
-        .push(Router::new().post(batch_get_data))
+        .push(Router::new().post(batch_get_data)) // todo, deprecated. remove this router in future version.
+        .push(Router::with_path("by_ids").post(batch_get_data))
+        .push(Router::with_path("by_parent_ids").post(batch_list_data_by_parent))
         .oapi_tag("data")
+}
+
+/// Batch list data items by parent IDs
+#[endpoint(
+    status_codes(200, 403),
+    request_body(content = BatchIdRequest, description = "Batch list data items by parent IDs"),
+    responses(
+        (status_code = 200, description = "Batch list data successfully", body = ListDataResponse),
+        (status_code = 400, description = "Bad Request"),
+    )
+)]
+async fn batch_list_data_by_parent(
+    namespace: PathParam<String>,
+    collection: PathParam<String>,
+    req: HpkeRequest<BatchIdRequest>,
+    marker: QueryParam<String, false>,
+    depot: &mut Depot,
+) -> ServiceResult<HpkeResponse<ListDataResponse>> {
+    let store = depot.obtain::<Arc<Store>>()?;
+    let user = depot.get::<UserSchema>("user_schema")?;
+    if req.0.ids.len() > 100 {
+        // limit batch get to 100 items to prevent abuse
+        Err(ServiceError::RequestError(
+            "Batch get limit exceeded: maximum 100 items per request".to_string(),
+        ))?;
+    }
+    let mut items = Vec::new();
+    let mut start_parent_id = None;
+    let mut start_child_id = None;
+    let mut accumulated_size = 0;
+    if let Some(marker_str) = marker.as_deref()
+        && let Some((p, c)) = marker_str.split_once('.')
+    {
+        tracing::info!(
+            "Batch list data by parent continue: start from marker {}, split into parent_id {} and id {}, will continue to find the position to start",
+            marker_str,
+            p,
+            c
+        );
+        start_parent_id = Some(p.to_string());
+        start_child_id = Some(c.to_string());
+    }
+    let mut next_p_marker = None;
+    let mut next_c_marker = None;
+    'parent_loop: for parent_id in req
+        .0
+        .ids
+        .iter()
+        .unique()
+        .skip_while(|id| start_parent_id.as_ref().is_some_and(|s| s != id.as_str()))
+    {
+        let mut loop_marker = if start_parent_id.as_ref().is_some_and(|s| s == parent_id.as_str()) {
+            start_child_id.take() // 使用后立即 take() 清空，确保下个 Parent 不会误用
+        } else {
+            None
+        };
+        loop {
+            let (children, marker) =
+                store.list_children(&namespace, &collection, parent_id, loop_marker, 100, &user.user_id)?;
+            let summary = children.into_iter().map(Into::into).collect::<Vec<DataItemSummary>>();
+            for item in &summary {
+                accumulated_size += serde_json::to_string(item)
+                    .map_err(|e| ServiceError::RequestError(format!("Failed to serialize data item: {e}")))?
+                    .len();
+                if accumulated_size > 100 * 1024 {
+                    next_p_marker = Some(parent_id.clone());
+                    next_c_marker = Some(item.id.clone());
+                    tracing::info!(
+                        "Batch list data by parent truncated: accumulated response size {} bytes exceeds limit, truncating at parent id {}, item id {}",
+                        accumulated_size,
+                        parent_id,
+                        item.id
+                    );
+                    break 'parent_loop;
+                }
+                items.push(item.clone());
+            }
+            if marker.is_none() {
+                break;
+            }
+            loop_marker = marker;
+        }
+    }
+    Ok(HpkeResponse(ListDataResponse {
+        page_info: PageInfo {
+            count: items.len(),
+            next_marker: next_p_marker
+                .zip(next_c_marker)
+                .map(|(parent_id, id)| format!("{}.{}", parent_id, id)),
+        },
+        items,
+    }))
 }
 
 /// Batch get data items by IDs
 #[endpoint(
     status_codes(200, 403),
-    request_body(content = BatchGetDataRequest, description = "Batch get data items by IDs"),
+    request_body(content = BatchIdRequest, description = "Batch get data items by IDs"),
     responses(
         (status_code = 200, description = "Batch get data successfully", body = BatchGetDataResponse),
         (status_code = 400, description = "Bad Request"),
@@ -38,7 +132,7 @@ pub fn create_batch_data_router() -> Router {
 async fn batch_get_data(
     namespace: PathParam<String>,
     collection: PathParam<String>,
-    req: HpkeRequest<BatchGetDataRequest>,
+    req: HpkeRequest<BatchIdRequest>,
     depot: &mut Depot,
 ) -> ServiceResult<HpkeResponse<BatchGetDataResponse>> {
     let store = depot.obtain::<Arc<Store>>()?;
@@ -75,7 +169,7 @@ async fn batch_get_data(
 }
 
 #[derive(Deserialize, ToSchema)]
-pub struct BatchGetDataRequest {
+pub struct BatchIdRequest {
     ids: Vec<String>,
 }
 
