@@ -147,7 +147,7 @@ async fn batch_get_data(
     let mut truncated = None;
     let mut accumulated_size = 0;
     for id in req.0.ids.iter().unique() {
-        if let Ok(item) = store.get(&namespace, &collection, &id, &user.user_id) {
+        if let Ok(item) = store.get(&namespace, &collection, id, &user.user_id) {
             // simple size check, can be optimized by only counting the body size, or even support streaming response for large data items.
             accumulated_size += serde_json::to_string(&item)
                 .map_err(|e| ServiceError::RequestError(format!("Failed to serialize data item: {e}")))?

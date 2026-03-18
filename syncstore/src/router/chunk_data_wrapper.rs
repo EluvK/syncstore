@@ -66,7 +66,7 @@ pub async fn check_chunk(
         }
         if is_completed {
             tracing::info!("All chunks received for upload_id={}", upload_id);
-            let final_data = merge_chunks(&chunk_status, &upload_id);
+            let final_data = merge_chunks(chunk_status, &upload_id);
 
             tracing::info!(
                 "Merged data size for upload_id={}: {} bytes",
@@ -98,7 +98,7 @@ fn merge_chunks(state: &DashMap<String, UploadStatus>, upload_id: &str) -> Vec<u
     let status = state.get(upload_id).unwrap();
     let mut combined = Vec::new();
 
-    for (_, path) in &status.received_chunks {
+    for path in status.received_chunks.values() {
         let mut f = std::fs::File::open(path).unwrap();
         let mut buffer = Vec::new();
         std::io::Read::read_to_end(&mut f, &mut buffer).unwrap();

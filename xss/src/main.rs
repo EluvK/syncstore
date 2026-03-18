@@ -33,17 +33,6 @@ async fn main() -> anyhow::Result<()> {
             "required": ["title", "repo_id", "category", "content"],
             "x-parent-id": { "parent": "repo", "field": "repo_id" }
         }),
-        // ✅ query users' subscriptions: list_by_owner()
-        // ✅ query subscribers of certain repo: list_by_parent(repo_id)
-        // "subscribe" => json!({
-        //     "type": "object",
-        //     "properties": {
-        //         "user_id": { "type": "string" },
-        //         "repo_id": { "type": "string" }
-        //     },
-        //     "required": ["user_id", "repo_id"],
-        //     "x-parent-id": { "parent": "repo", "field": "repo_id" }
-        // }),
         // ✅ query comments of certain post: list_by_parent(post_id)
         "comment" => json!({
             "type": "object",
@@ -58,7 +47,41 @@ async fn main() -> anyhow::Result<()> {
             "x-parent-id": { "parent": "post", "field": "post_id" }
         }),
     };
-    let store = Store::build(&config.store_config.directory, vec![("xbb", xbb_schema)])?;
+    let tracker_schema = collection! {
+        "tracker" => json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "description": { "type": ["string", "null"] },
+                "category": { "type": "string" },
+                "type": { "type": "string" },
+                "config": {
+                    "oneOf": [
+                        { "type": "object", "properties": { "period_days": { "type": "integer" } }, "required": ["period_days"] },
+                        { "type": "object", "properties": { "goal_type": { "type": "string" }, "target_value": { "type": "string" } }, "required": ["goal_type", "target_value"] },
+                        { "type": "object", "properties": { "base_date": { "type": "string", "format": "date-time" }, "is_lunar": { "type": "boolean" }, "remind_type": { "type": "string" } }, "required": ["base_date", "is_lunar", "remind_type"] }
+                    ]
+                }
+            },
+            "required": ["name", "category", "type", "config"]
+        }),
+        "record" => json!({
+            "type": "object",
+            "properties": {
+                "tracker_id": { "type": "string" },
+                "timestamp": { "type": "string", "format": "date-time" },
+                "value": { "type": ["string", "null"] },
+                "content": { "type": ["string", "null"] }
+            },
+            "required": ["tracker_id", "timestamp"],
+            "x-parent-id": { "parent": "tracker", "field": "tracker_id" }
+        }),
+    };
+
+    let store = Store::build(
+        &config.store_config.directory,
+        vec![("xbb", xbb_schema), ("tracker", tracker_schema)],
+    )?;
     syncstore::init_service(store, &config.service_config).await?;
     Ok(())
 }
