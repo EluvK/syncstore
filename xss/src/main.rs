@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
                 "config": {
                     "oneOf": [
                         { "type": "object", "properties": { "period_days": { "type": "integer" } }, "required": ["period_days"] },
-                        { "type": "object", "properties": { "goal_type": { "type": "string" }, "target_value": { "type": "string" } }, "required": ["goal_type", "target_value"] },
+                        { "type": "object", "properties": { "goal_type": { "type": "string" }, "target_value": { "type": "string" }, "progress_mode": { "type": "string", "enum": ["accumulate", "latest"] } }, "required": ["goal_type", "target_value"] },
                         { "type": "object", "properties": { "base_date": { "type": "string", "format": "date-time" }, "is_lunar": { "type": "boolean" }, "remind_type": { "type": "string" } }, "required": ["base_date", "is_lunar", "remind_type"] }
                     ]
                 }
