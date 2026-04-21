@@ -77,10 +77,21 @@ async fn main() -> anyhow::Result<()> {
             "x-parent-id": { "parent": "tracker", "field": "tracker_id" }
         }),
     };
+    let task_schema = collection! {
+        "check_list" => json!({
+            "type": "object",
+            "properties": {
+                "tasks": { "type": "string" },
+                "archived": { "type": "boolean" },
+                "archived_at": { "type": ["string", "null"] }
+            },
+            "required": ["tasks", "archived"]
+        }),
+    };
 
     let store = Store::build(
         &config.store_config.directory,
-        vec![("xbb", xbb_schema), ("tracker", tracker_schema)],
+        vec![("xbb", xbb_schema), ("tracker", tracker_schema), ("task", task_schema)],
     )?;
     syncstore::init_service(store, &config.service_config).await?;
     Ok(())
