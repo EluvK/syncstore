@@ -5,6 +5,7 @@ prefix = "xss"
 [service_config]
 admin_address = "127.0.0.1:10102"
 address = "127.0.0.1:10101"
+latency_inject = "1200ms"
 jwt.access_secret = "your_access_secret"
 jwt.refresh_secret = "your_refresh_secret"
 

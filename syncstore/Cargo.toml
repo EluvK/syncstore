@@ -12,6 +12,7 @@ base64-serde = { workspace = true }
 bitflags = { version = "2.10.0" }
 chrono = { workspace = true }
 dashmap = "6.1.0"
+humantime = { workspace = true }
 hpke = { workspace = true }
 http-body-util = "0.1.3"
 itertools = { workspace = true }

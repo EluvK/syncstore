@@ -14,6 +14,7 @@ async-trait = "0.1.89"
 base64 = "0.22.1"
 base64-serde = "0.8.0"
 chrono = { version = "0.4.42", features = ["serde"] }
+humantime = "2.2.0"
 hpke = "0.13"
 itertools = "0.14.0"
 jsonschema = "0.40.0"

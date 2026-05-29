@@ -52,11 +52,28 @@ pub fn create_router(config: &ServiceConfig, store: Arc<Store>) -> Router {
         .push(Router::with_path("user").push(user::create_router()))
         .oapi_security(SecurityRequirement::new("bearer", vec!["bearer"]));
     let chunk_status: DashMap<String, chunk_data_wrapper::UploadStatus> = DashMap::new();
-    Router::new()
+    let router = Router::new()
         .hoop(affix_state::inject(store))
         .hoop(affix_state::inject(Arc::new(chunk_status)))
+        .hoop(affix_state::inject(config.latency_inject))
         .push(auth_router)
-        .push(non_auth_router)
+        .push(non_auth_router);
+
+    if config.latency_inject.is_some() {
+        router.hoop(latency_inject)
+    } else {
+        router
+    }
+}
+
+#[handler]
+pub async fn latency_inject(req: &mut Request, res: &mut Response, depot: &mut Depot, ctrl: &mut FlowCtrl) {
+    if let Ok(latency) = depot.obtain::<Option<std::time::Duration>>()
+        && let Some(latency) = *latency
+    {
+        tokio::time::sleep(latency).await;
+    }
+    ctrl.call_next(req, depot, res).await;
 }
 
 pub fn admin_router(store: Arc<Store>) -> Router {
