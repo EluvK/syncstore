@@ -88,10 +88,24 @@ async fn main() -> anyhow::Result<()> {
             "required": ["tasks", "archived"]
         }),
     };
+    let clipboard_history_schema = collection! {
+        "entry" => json!({
+            "type": "object",
+            "properties": {
+                "data": { "type": "string" },
+            },
+            "required": ["data"]
+        }),
+    };
 
     let store = Store::build(
         &config.store_config.directory,
-        vec![("xbb", xbb_schema), ("tracker", tracker_schema), ("task", task_schema)],
+        vec![
+            ("xbb", xbb_schema),
+            ("tracker", tracker_schema),
+            ("task", task_schema),
+            ("clipboard_history", clipboard_history_schema),
+        ],
     )?;
     syncstore::init_service(store, &config.service_config).await?;
     Ok(())
