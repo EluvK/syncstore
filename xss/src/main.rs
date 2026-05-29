@@ -95,6 +95,10 @@ async fn main() -> anyhow::Result<()> {
             "type": "object",
             "properties": {
                 "data": { "type": "string" },
+                "captured_at": {
+                    "type": ["string", "null"],
+                    "format": "date-time"
+                }
             },
             "required": ["data"]
         }),
