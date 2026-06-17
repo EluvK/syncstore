@@ -103,6 +103,60 @@ async fn main() -> anyhow::Result<()> {
             "required": ["data"]
         }),
     };
+    let chat_schema = collection! {
+        "assistant" => json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string", "enum": ["system", "userDefined"] },
+                "description": { "type": "string" },
+                "prompt": { "type": "string" },
+                "avatar_url": { "type": ["string", "null"] },
+                "model_config": {
+                    "type": ["object", "null"],
+                    "properties": {
+                        "provider": { "type": ["string", "null"], "enum": ["deepSeek", null] },
+                        "base_url": { "type": ["string", "null"] },
+                        "model": { "type": ["string", "null"] },
+                        "temperature": { "type": ["number", "null"] },
+                        "thinking_enabled": { "type": ["boolean", "null"] },
+                        "reasoning_effort": { "type": ["string", "null"] }
+                    }
+                }
+            },
+            "required": ["name", "type", "description", "prompt"]
+        }),
+        "conversation" => json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "assistant_id": { "type": "string" },
+                "assistant_name": { "type": "string" },
+                "like": { "type": "boolean" }
+            },
+            "required": ["name", "assistant_id", "assistant_name", "like"]
+        }),
+        "message" => json!({
+            "type": "object",
+            "properties": {
+                "conversation_id": { "type": "string" },
+                "role": { "type": "string", "enum": ["system", "user", "assistant"] },
+                "text": { "type": "string" },
+                "reasoning_text": { "type": ["string", "null"] },
+                "usage": {
+                    "type": ["object", "null"],
+                    "properties": {
+                        "prompt_tokens": { "type": "integer" },
+                        "completion_tokens": { "type": "integer" },
+                        "total_tokens": { "type": "integer" }
+                    },
+                    "required": ["prompt_tokens", "completion_tokens", "total_tokens"]
+                }
+            },
+            "required": ["conversation_id", "role", "text"],
+            "x-parent-id": { "parent": "conversation", "field": "conversation_id" }
+        }),
+    };
 
     let store = Store::build(
         &config.store_config.directory,
@@ -111,6 +165,7 @@ async fn main() -> anyhow::Result<()> {
             ("tracker", tracker_schema),
             ("task", task_schema),
             ("clipboard_history", clipboard_history_schema),
+            ("chat", chat_schema),
         ],
     )?;
     syncstore::init_service(store, &config.service_config).await?;
