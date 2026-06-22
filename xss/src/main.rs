@@ -157,6 +157,29 @@ async fn main() -> anyhow::Result<()> {
             "x-parent-id": { "parent": "conversation", "field": "conversation_id" }
         }),
     };
+    let checkin_schema = collection! {
+        "event" => json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "description": { "type": ["string", "null"] },
+                "color_value": { "type": "integer" }
+            },
+            "required": ["name", "color_value"]
+        }),
+        "record" => json!({
+            "type": "object",
+            "properties": {
+                "event_id": { "type": "string" },
+                "created_at_utc": { "type": "string", "format": "date-time" },
+                "local_day_key": { "type": "string" },
+                "timezone_offset_minutes": { "type": "integer" },
+                "note": { "type": ["string", "null"] }
+            },
+            "required": ["event_id", "created_at_utc", "local_day_key", "timezone_offset_minutes"],
+            "x-parent-id": { "parent": "event", "field": "event_id" }
+        }),
+    };
 
     let store = Store::build(
         &config.store_config.directory,
@@ -166,6 +189,7 @@ async fn main() -> anyhow::Result<()> {
             ("task", task_schema),
             ("clipboard_history", clipboard_history_schema),
             ("chat", chat_schema),
+            ("checkin", checkin_schema),
         ],
     )?;
     syncstore::init_service(store, &config.service_config).await?;
